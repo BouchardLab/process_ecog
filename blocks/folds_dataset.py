@@ -107,7 +107,7 @@ class H5PYDatasetFolds(Dataset):
         self._parse_dataset_info()
 
         kwargs.setdefault('axis_labels', self.default_axis_labels)
-        super(H5PYDataset, self).__init__(**kwargs)
+        super(H5PYDatasetFolds, self).__init__(**kwargs)
 
     def _parse_dataset_info(self):
         """Parses information related to the HDF5 interface.
@@ -133,7 +133,7 @@ class H5PYDatasetFolds(Dataset):
                     "dataset. Available splits are " +
                     "{}.".format(available_splits))
             split_provides_sources = set(
-                self.get_provided_sources(handle, split, fold))
+                self.get_provided_sources(handle, split, self.fold))
             if provides_sources:
                 provides_sources &= split_provides_sources
             else:
@@ -151,7 +151,7 @@ class H5PYDatasetFolds(Dataset):
         sources = set()
         comment_len = 1
         for split in split_list:
-            sources |= set(split[1])
+            sources.add(split[1])
             comment_len = max([comment_len, len(split[-1])])
         sources = sorted(list(sources))
         source_len = max(len(source) for source in sources)
@@ -234,10 +234,10 @@ class H5PYDatasetFolds(Dataset):
         """
         all_folds = tuple(
             set(row['fold'] for row in h5file.attrs['split']))
-        return all_sources
+        return all_folds
 
     @staticmethod
-    def get_provided_sources(h5file, split):
+    def get_provided_sources(h5file, split, fold):
         """Returns the sources provided by a specific split.
 
         Parameters
@@ -257,7 +257,7 @@ class H5PYDatasetFolds(Dataset):
             row['source'].decode('utf8') for row in h5file.attrs['split']
             if (row['split'].decode('utf8') == split)
             and (row['available'])
-            and (int(row['fold'].decode('utf9')) == fold))
+            and (row['fold'] == fold))
         return provided_sources
 
     @staticmethod
@@ -278,7 +278,7 @@ class H5PYDatasetFolds(Dataset):
 
         """
         vlen_sources = []
-        for source_name in H5PYDataset.get_all_sources(h5file):
+        for source_name in H5PYDatasetFolds.get_all_sources(h5file):
             source = h5file[source_name]
             if len(source.dims) > 0 and 'shapes' in source.dims[0]:
                 if len(source.dims) > 1:
@@ -304,8 +304,8 @@ class H5PYDatasetFolds(Dataset):
 
         """
         axis_labels = {}
-        vlen_sources = H5PYDataset.get_vlen_sources(h5file)
-        for source_name in H5PYDataset.get_all_sources(h5file):
+        vlen_sources = H5PYDatasetFolds.get_vlen_sources(h5file)
+        for source_name in H5PYDatasetFolds.get_all_sources(h5file):
             if source_name in vlen_sources:
                 axis_labels[source_name] = (
                     (h5file[source_name].dims[0].label,) +

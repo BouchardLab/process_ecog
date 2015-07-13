@@ -7,12 +7,12 @@ from folds_dataset import H5PYDatasetFolds
 pylearn2_folder = os.environ['PYLEARN2_DATA_PATH']
 fuel_folder = os.environ['FUEL_DATA_PATH']
 read_file = os.path.join(pylearn2_folder, 'ecog', 'EC2_CV_85_nobaseline_aug.h5')
-write_file = os.path.join(fuel_folder, 'EC2_CV_85_nobaseline_aug_fuel.h5')
+write_file = os.path.join(fuel_folder, 'EC2_CV_85_nobaseline_aug_fuel.hdf5')
 
 with h5py.File(read_file, 'r') as f:
     X = f['X'].value
     y = f['y'].value
-    X_aug = f['X_aug'].value
+    #X_aug = f['X_aug'].value
     y_consonant = f['y_consonant'].value
     y_vowel = f['y_vowel'].value
 
@@ -21,9 +21,11 @@ with h5py.File(write_file, 'w') as f:
     X_ds.attrs.create('DIMENSION_LABELS',
                       data=['batch', 'frequency', 'time', 'channels'])
 
+    """
     X_aug_ds = f.create_dataset('augmented_features', data=X_aug)
     X_aug_ds.attrs.create('DIMENSION_LABELS',
                           data=['batch', 'frequency', 'time', 'channels'])
+    """
 
     y_ds = f.create_dataset('targets',
             data=y.argmax(axis=1)[:,np.newaxis])
