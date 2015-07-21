@@ -27,6 +27,8 @@ from blocks.extensions import FinishAfter, Printing, Timing
 from blocks.extensions.saveload import Checkpoint
 from blocks.extensions.monitoring import (TrainingDataMonitoring,
         DataStreamMonitoring)
+from blocks.extensions.stopping import FinishIfNoImprovementAfter
+from blocks.extensions.training import TrackTheBest
 from blocks.main_loop import MainLoop
 from blocks.filter import VariableFilter
 from blocks.utils import named_copy, dict_union
@@ -67,11 +69,13 @@ def train_model(data, kwargs):
     y_hat = Softmax().apply(y_hat.mean(0))
     y_hat.name = 'y_hat'
 
+    print('Defining Cost...')
     cost = CategoricalCrossEntropy().apply(y.mean(1), y_hat)
     cost.name = 'Squared Error'
     misclassification = MisclassificationRate().apply(y.mean(1).argmax(1), y_hat)
-    misclassification.name = 'Misclassification Rate'
+    misclassification.name = 'misclass'
 
+    print('Initializing Parameters...')
     for brick in (rec, x_to_h, h_to_y):
         brick.weights_init = dict_to_init[kwargs['init']](kwargs['init_scale'])
         brick.biases_init = Constant(0.)
@@ -95,9 +99,12 @@ def train_model(data, kwargs):
 
     main_loop = MainLoop(data_stream=streams[0], algorithm=algorithm,
             extensions=extensions+\
-                [FinishAfter(after_n_epochs=n_epochs),
-                Printing()],
+                [SaveBest['valid_misclass_best_so_far'],
+                 FinishAfter(after_n_epochs=kwargs['max_epochs']),
+                 FinishIfNoImprovementAfter['valid_misclass_best_so_far', epochs=kwargs['improve_epochs']],
+                 Printing()],
             model=model)
 
     print('Starting training ...')
     main_loop.run()
+    return main_loop.log.current_row['valid_misclass_best_so_far']
