@@ -6,7 +6,7 @@ from blocks.serialization import secure_dump
 
 logger = logging.getLogger(__name__)
 
-SAVES_TO = "saved_to"
+SAVED_TO = "saved_to"
 
 
 class SaveTheBest(SimpleExtension):
@@ -44,11 +44,10 @@ class SaveTheBest(SimpleExtension):
     in the `extensions` argument to :class:`blocks.main_loop.MainLoop`.
 
     """
-    def __init__(self, record_name, notification_name=None,
-                 choose_best=min, path, 
+    def __init__(self, record_name, path, notification_name=None,
+                 choose_best=min,
                  save_separately=None,
-                 use_cpickle, **kwargs):
-        kwargs.setdefault("after_training", True)
+                 use_cpickle=False, **kwargs):
         self.record_name = record_name
         if not notification_name:
             notification_name = record_name + "_best_so_far"
@@ -56,7 +55,7 @@ class SaveTheBest(SimpleExtension):
         self.best_name = "best_" + record_name
         self.choose_best = choose_best
         kwargs.setdefault("after_epoch", True)
-        super(TrackTheBest, self).__init__(**kwargs)
+        super(SaveTheBest, self).__init__(**kwargs)
         if not save_separately:
             save_separately = []
         self.path = path
@@ -64,11 +63,11 @@ class SaveTheBest(SimpleExtension):
         self.use_cpickle = use_cpickle
     
     def save_separately_filenames(self, path):
-    root, ext = os.path.splitext(path)
-    return {attribute: root + "_" + attribute + ext
-            for attribute in self.save_separately}
+        root, ext = os.path.splitext(path)
+        return {attribute: root + "_" + attribute + ext
+                for attribute in self.save_separately}
 
-    def do(self, which_callback, *args):
+    def do(self, callback_name, *args):
         current_value = self.main_loop.log.current_row.get(self.record_name)
         if current_value is None:
             return
@@ -93,6 +92,6 @@ class SaveTheBest(SimpleExtension):
                 path = None
                 raise
             finally:
-            already_saved_to = self.main_loop.log.current_row.get(SAVED_TO, ())
-            self.main_loop.log.current_row[SAVED_TO] = (already_saved_to +
-                                                        (path,))
+                already_saved_to = self.main_loop.log.current_row.get(SAVED_TO, ())
+                self.main_loop.log.current_row[SAVED_TO] = (already_saved_to +
+                                                            (path,))

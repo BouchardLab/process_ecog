@@ -70,7 +70,7 @@ class SimpleContinuousRecurrent(BaseRecurrent, Initializable):
                                                name="initial_state"))
         add_role(self.params[1], INITIAL_STATE)
         if self.tau is None:
-            self.tau = shared_floatx(.1, name="time constant")
+            self.tau = shared_floatx(10., name="time constant")
             self.params.append(self.tau)
         else:
             self.tau = shared_floatx(self.tau, name="time constant")
@@ -95,9 +95,9 @@ class SimpleContinuousRecurrent(BaseRecurrent, Initializable):
             only if not given.
 
         """
-        delta = inputs + tensor.dot(states, self.W)
+        delta = -states + inputs + tensor.dot(states, self.W)
         delta = self.children[0].apply(delta)
-        next_states = (self.tau-1.)*states + self.tau*delta
+        next_states = states + delta/self.tau
         if mask:
             next_states = (mask[:, None] * next_states +
                            (1 - mask[:, None]) * states)
