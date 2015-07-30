@@ -23,4 +23,9 @@ def main(job_id, opt_params):
         test_misclass[ii] = te
 
     print '----------result------------'
-    print valid_misclass.mean()
+    print 'mean', valid_misclass.mean()
+    print 'std', valid_misclass.std()
+
+
+if __name__ == "__main__":
+    main(None, None)

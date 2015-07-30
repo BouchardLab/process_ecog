@@ -16,7 +16,7 @@ def pylearn2_ecog(audio, batch_size, kwargs):
     for sp in splits:
         cur_dataset = ecog.ECoG(data_file, sp, **kwargs)
         ds_x = np.squeeze(cur_dataset.get_topological_view())
-        ds_y = cur_dataset.y[:,np.newaxis,:]
+        ds_y = cur_dataset.y.argmax(axis=1).astype(np.int32)
         d = {'x': ds_x,
              'y': ds_y}
         datasets.append(IndexableDataset(d))
