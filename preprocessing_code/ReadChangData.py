@@ -1,6 +1,6 @@
 __author__ = 'David Conant, Jesse Livezey'
 
-import re, tables, os, pdb, glob, csv
+import h5py, re, os, pdb, glob, csv
 import numpy as np
 import scipy as sp
 import scipy.stats as stats
@@ -113,7 +113,27 @@ def htk_to_hdf5(pth, blocks, task, align_window=None, dtype='HG'):
         D, tokens = load_hdf5(fname)
 
     anat = load_anatomy(pth)
-    return (D)
+    return (D, anat, start_times, stop_times)
+
+def save_hdf5(fname, D, tokens):
+    tokens = sorted(tokens)
+    labels = np.array(range(len(tokens)))
+    X = None
+    y = None
+    for label, token in zip(labels, tokens):
+        X_t = np.transpose(D[token], axes=(2, 0, 1))
+        if X is None:
+            X = X_t
+        else:
+            X = np.append(X, X_t, axis=0)
+        if y is None:
+            y = label * np.ones(X_t.shape[0], dtype=int)
+        else:
+            y = np.append(y, label * np.ones(X_t.shape[0], dtype=int))
+    with h5py.File(fname, 'w') as f:
+        f.create_dataset('X', data=X.astype('float32'))
+        f.create_dataset('y', data=y)
+        f.create_dataset('tokens', data=tokens)
 
 def make_df(parseout, block, subject):
     keys = sorted(parseout.keys())
