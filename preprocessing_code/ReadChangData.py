@@ -1,6 +1,7 @@
+#!/usr/bin/env python
 __author__ = 'David Conant, Jesse Livezey'
 
-import h5py, re, os, pdb, glob, csv
+import argparse, h5py, re, os, pdb, glob, csv
 import numpy as np
 import scipy as sp
 import scipy.stats as stats
@@ -10,13 +11,13 @@ import pandas as pd
 import HTK
 
 
-def htk_to_hdf5(pth, blocks, task, align_window=None, dtype='HG'):
+def htk_to_hdf5(path, blocks, task, align_window=None, data_type='HG', baseline='whole'):
     """
     Process task data into segments with labels.
 
     Parameters
     ----------
-    pth : str
+    path : str
         Path to subject folder.
     blocks : list of ints
         Blocks from which data is gathered.
@@ -24,7 +25,7 @@ def htk_to_hdf5(pth, blocks, task, align_window=None, dtype='HG'):
         Tokens to be extracted.
     align_window : list of two ints
         Time window in seconds around each token.
-    dtype : str
+    data_type : str
         Type of data to use.
 
     Returns
@@ -48,13 +49,15 @@ def htk_to_hdf5(pth, blocks, task, align_window=None, dtype='HG'):
                          'too', 'vaa', 'vee', 'voo', 'waa', 'wee', 'woo','yaa','yee',
                          'yoo', 'zaa', 'zee', 'zoo'])
     else:
-        raise ValueError("task must of one of ['CV'].")
+        raise ValueError("task must of one of ['CV']: "+str(task)+'.')
 
-    if dtype not in ['HG']:
-        raise ValueError("dtype must be one of ['HG'].")
+    if data_type not in ['HG']:
+        raise ValueError("data_type must be one of ['HG']: "+str(data_type)+'.')
 
     if align_window is None:
         align_window = np.array([-1., 1.])
+    else:
+        align_window = np.array(align_window)
 
     def block_str(blocks):
         rval = 'blocks_'
@@ -66,9 +69,9 @@ def htk_to_hdf5(pth, blocks, task, align_window=None, dtype='HG'):
         rval = 'align_window_' + str(align_window[0]) + '_to_'+ str(align_window[1])
         return rval
 
-    subject = pth.split("/")[-1]
-    fname = os.path.join(pth, 'hdf5', (subject + '_' + block_str(blocks)
-                                       + task + '_' + dtype + '_'
+    folder, subject = os.path.split(path)
+    fname = os.path.join(path, 'hdf5', (subject + '_' + block_str(blocks)
+                                       + task + '_' + data_type + '_'
                                        + align_window_str(align_window) + '.h5'))
 
     if not os.path.isfile(fname):
@@ -78,7 +81,7 @@ def htk_to_hdf5(pth, blocks, task, align_window=None, dtype='HG'):
         for iblock, block in enumerate(blocks):
             print 'Processing block ' + str(block)
             blockname = subject + '_B' + str(block)
-            blockpath = os.path.join(pth, blockname)
+            blockpath = os.path.join(path, blockname)
             # Convert parseout to dataframe
             textgrid_path = os.path.join(blockpath, blockname + '_transcription_final.TextGrid')
             lab_path = os.path.join(blockpath, blockname + '_transcription_final.lab')
@@ -104,15 +107,16 @@ def htk_to_hdf5(pth, blocks, task, align_window=None, dtype='HG'):
                 start_times[token] = (np.hstack((start_times[token], start.astype(float))) if
                                       start_times[token].size else start.astype(float))
                 D[token] = (np.dstack((D[token], run_makeD(blockpath, event_times,
-                                                           align_window, dt=dtype))) if 
-                            D[token].size else run_makeD(blockpath, event_times, align_window, dt=dtype))
+                                                           align_window, dt=data_type))) if 
+                            D[token].size else run_makeD(blockpath, event_times, align_window, dt=data_type))
 
+        print('Saving to: '+fname)
         save_hdf5(fname, D, tokens)
     else:
         print 'File found; Loading...'
         D, tokens = load_hdf5(fname)
 
-    anat = load_anatomy(pth)
+    anat = load_anatomy(path)
     return (D, anat, start_times, stop_times)
 
 def save_hdf5(fname, D, tokens):
@@ -130,10 +134,20 @@ def save_hdf5(fname, D, tokens):
             y = label * np.ones(X_t.shape[0], dtype=int)
         else:
             y = np.append(y, label * np.ones(X_t.shape[0], dtype=int))
+    folder, f = os.path.split(fname)
+
+    try:
+        os.mkdir(folder)
+    except OSError:
+        pass
+
     with h5py.File(fname, 'w') as f:
         f.create_dataset('X', data=X.astype('float32'))
         f.create_dataset('y', data=y)
         f.create_dataset('tokens', data=tokens)
+
+def load_hdf5(fname):
+    raise NotImplementedError
 
 def make_df(parseout, block, subject):
     keys = sorted(parseout.keys())
@@ -156,12 +170,12 @@ def make_df(parseout, block, subject):
     return df
 
 
-def run_makeD(blockpath, times, t_window, dt, zscr='whole'):
+def run_makeD(blockpath, times, align_window, dt, zscr='whole'):
 
     def HG():
         bad_electrodes = loadBadElectrodes(blockpath) -1
         bad_times = np.array([]) #loadBadTimes(blockpath)
-        hg, fs_hg = loadHG(blockpath)
+        hg, fs_hg = load_HG(blockpath)
 
         hg = hg[:256]
 
@@ -173,13 +187,13 @@ def run_makeD(blockpath, times, t_window, dt, zscr='whole'):
                 trange = 5
 
 
-        D = makeD(hg, fs_hg, times, t_window, bad_times=bad_times, bad_electrodes=bad_electrodes)
+        D = makeD(hg, fs_hg, times, align_window, bad_times=bad_times, bad_electrodes=bad_electrodes)
 
         return D
 
     def form():
         F = loadForm(blockpath)
-        D = makeD(F, 100, times, t_window, bad_times=np.array([]), bad_electrodes=np.array([]))
+        D = makeD(F, 100, times, align_window, bad_times=np.array([]), bad_electrodes=np.array([]))
 
         return D
 
@@ -190,7 +204,7 @@ def run_makeD(blockpath, times, t_window, dt, zscr='whole'):
 
     return D
 
-def makeD(data, fs_data, times, t_window=None, bad_times=None, bad_electrodes=None):
+def makeD(data, fs_data, times, align_window=None, bad_times=None, bad_electrodes=None):
     """
     Aligns data to time. Assumes constant sampling frequency
 
@@ -201,7 +215,7 @@ def makeD(data, fs_data, times, t_window=None, bad_times=None, bad_electrodes=No
     data          data to be time-aligned         np.array(n_elects x n_time)
     fs_data       frequency of data seconds       double                          seconds
     times         times to align the data to      np.array(1 x n_times)           seconds
-    t_window      window around alignment time    np.array(1 x 2)                 seconds
+    align_window      window around alignment time    np.array(1 x 2)                 seconds
                   (before is -ive)
     bad_times     times when there are artifacts  np.array(n_bad_times x 2)       seconds
     bad_electrodes list of bad electrodes         list of channel numbers
@@ -211,22 +225,20 @@ def makeD(data, fs_data, times, t_window=None, bad_times=None, bad_electrodes=No
 
     D             Data aligned to times           np.array(n_elects x n_time_win x n_times)
     """
-    if t_window is None:
-        t_window = np.array([-1., 1.])
+    if align_window is None:
+        align_window = np.array([-1., 1.])
+    else:
+        align_window = np.array(align_window)
 
-    #malloc
-    D = nans((data.shape[0], np.ceil(np.diff(t_window)*fs_data), len(times)))
+    D = nans((data.shape[0], np.ceil(np.diff(align_window)*fs_data), len(times)))
     tt_data = np.arange(data.shape[1])/fs_data
 
-    try:
-        for itime, time in enumerate(times):
-            this_data = data[:,isin(tt_data, t_window + time)]
-            D[:,:this_data.shape[1],itime] = this_data
+    for itime, time in enumerate(times):
+        this_data = data[:,isin(tt_data, align_window + time)]
+        D[:,:this_data.shape[1],itime] = this_data
 
-    except:
-        pdb.set_trace()
     if bad_times.any():
-        good_trials = [not np.any(np.logical_and(bad_times,np.any(is_overlap(t_window + time, bad_times)))) for time in times]
+        good_trials = [not np.any(np.logical_and(bad_times,np.any(is_overlap(align_window + time, bad_times)))) for time in times]
         D = D[:,:,good_trials]
 
     if len(bad_electrodes):
@@ -236,7 +248,7 @@ def makeD(data, fs_data, times, t_window=None, bad_times=None, bad_electrodes=No
     return D
 
 
-def loadHG(blockpath):
+def load_HG(blockpath):
     htk_path = os.path.join(blockpath, 'HilbAA_70to150_8band')
     HTKout = HTK.readHTKs(htk_path)
     hg = HTKout['data']
@@ -252,13 +264,6 @@ def loadForm(blockpath):
             F.append(column)
     F = np.array(F)
     return F
-
-def open_D_table(fname, tokens):
-    with tables.openFile(fname) as tf:
-        D = {}
-        for n in tokens:
-            D[n] = tf.root.__getattr__(n).read()
-    return D
 
 def parseTextGrid(fname):
     """
@@ -424,25 +429,14 @@ def load_anatomy(subj_dir):
 
     return electrode_labels
 
-
-
-
-def save_table_file(filename, filedict):
-    """Saves the variables in [filedict] in a hdf5 table file at [filename].
-    """
-    with tables.openFile(filename, mode="w", title="save_file") as hf:
-        for vname, var in filedict.items():
-            hf.createArray("/", vname, var)
-
-
 def loadBadElectrodes(blockpath):
-    a = []
+    a = ''
     with open(os.path.join(blockpath, 'Artifacts', 'badChannels.txt'),'rt') as f:
         rd = csv.reader(f, delimiter=' ')
         for line in rd:
-            a = line
+            a += line
 
-    a = filter(None, a) # remove spaces
+    a = [num for num in a.split(' ') if num != '']
     a = np.array([int(x) for x in list(a)])
 
     return a
@@ -492,3 +486,16 @@ def isin(tt, tbounds):
         for i in range(tbounds.shape[0]):
             tf = (tf | (tt > tbounds[i,0]) & (tt < tbounds[i,1]))
     return tf
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Preprocess ECoG Data')
+    parser.add_argument('path', help='path to subject folder')
+    parser.add_argument('blocks', nargs='+', type=int)
+    parser.add_argument('-t', '--task', default='CV')
+    parser.add_argument('-a', '--align_window', nargs=2, type=float, default=[-1., 1.])
+    parser.add_argument('-d', '--data_type', default='HG')
+    parser.add_argument('-l', '--baseline', default='whole')
+    args = parser.parse_args()
+    htk_to_hdf5(args.path, args.blocks, args.task, args.align_window,
+                args.data_type, args.baseline)

@@ -1,0 +1,141 @@
+!obj:pylearn2.train.Train {
+    dataset: &train !obj:pylearn2.datasets.ecog.ECoG {
+        filename: '${PYLEARN2_DATA_PATH}/ecog/filtered_85.h5',
+        which_set: 'train',
+        center: False,
+        fold: %(fold)s,
+    },
+    model: !obj:pylearn2.models.mlp.MLP {
+        input_space: !obj:pylearn2.space.Conv2DSpace {
+                         shape: [1,258],
+                         num_channels: 85,
+        },
+    layers: [ 
+            !obj:pylearn2.models.mlp.ConvRectifiedLinear {
+            layer_name: 'h0',
+            output_channels: %(chan_0)i,
+            kernel_shape: [1, 20],
+            pool_shape: [1, 1],
+            pool_stride: [1, 1],
+            irange: .05,
+            max_kernel_norm: %(max_ker_norm)f,
+            }, 
+            !obj:pylearn2.models.mlp.ConvRectifiedLinear {
+            layer_name: 'h1',
+            output_channels: %(chan_1)i,
+            kernel_shape: [1, 1],
+            pool_shape: [1, 5],
+            pool_stride: [1, 5],
+            irange: .05,
+            max_kernel_norm: %(max_ker_norm)f,
+            }, 
+            !obj:pylearn2.models.mlp.ConvRectifiedLinear {
+            layer_name: 'h2',
+            output_channels: %(chan_2)i,
+            kernel_shape: [1, 10],
+            pool_shape: [1, 1],
+            pool_stride: [1, 1],
+            irange: .05,
+            max_kernel_norm: %(max_ker_norm)f,
+            }, 
+            !obj:pylearn2.models.mlp.ConvRectifiedLinear {
+            layer_name: 'h3',
+            output_channels: %(chan_2)i,
+            kernel_shape: [1, 1],
+            pool_shape: [1, 5],
+            pool_stride: [1, 5],
+            irange: .05,
+            max_kernel_norm: %(max_ker_norm)f,
+            }, 
+            #!obj:pylearn2.models.mlp.RectifiedLinear {
+            #layer_name: 'f0',
+            #dim: %(f0)i,
+            #istdev: %(f0_std)f,
+            #max_col_norm: %(max_col_norm)f,
+            #}, 
+            #!obj:pylearn2.models.mlp.RectifiedLinear {
+            #layer_name: 'f1',
+            #dim: 150,
+            #istdev: .005,
+            #max_col_norm: %(max_col_norm)f,
+            #}, 
+               !obj:pylearn2.models.mlp.Softmax {
+                     layer_name: 'y',
+                     n_classes: 57,
+                     istdev: .005,
+                     max_col_norm: %(max_col_norm)f,
+                     }
+                ],
+    },
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        batch_size: 20,
+        learning_rate: .1,
+        train_iteration_mode: 'sequential',
+        monitoring_dataset:
+            {
+                'train' : *train,
+                'valid' : !obj:pylearn2.datasets.ecog.ECoG {
+                                filename: '${PYLEARN2_DATA_PATH}/ecog/filtered_85.h5',
+                                which_set: 'valid',
+                                center: False,
+                                fold: %(fold)s,
+                          },
+                'test' : !obj:pylearn2.datasets.ecog.ECoG {
+                                filename: '${PYLEARN2_DATA_PATH}/ecog/filtered_85.h5',
+                                which_set: 'test',
+                                center: False,
+                                fold: %(fold)s,
+                          },
+            },
+        monitoring_batch_size: 50,
+        monitor_iteration_mode: 'sequential',
+        monitoring_costs: {'no_dropout': !obj:pylearn2.costs.mlp.Default {}, },
+        cost: !obj:pylearn2.costs.cost.SumOfCosts { costs: [
+                [1., !obj:pylearn2.costs.mlp.Default {} ],
+                #[1., !obj:pylearn2.costs.mlp.dropout.Dropout {
+                #        default_input_include_prob: .8,
+                #        default_input_scale: 1.25,
+                #} ],
+                #[1., !obj:pylearn2.costs.mlp.WeightDecay {
+                #       coeffs: { 'h0': .0001,
+                #                 'h1': .0001,
+                #                 'f0': .0001,
+                #                 'f1': .0001,
+                #                 'y': .0001 }
+                #       },
+                #],
+            ]
+        },
+        learning_rule: !obj:pylearn2.training_algorithms.learning_rule.Momentum {
+                init_momentum: .5,
+                nesterov_momentum: True
+            },
+        update_callbacks: !obj:pylearn2.training_algorithms.sgd.ExponentialDecay {
+                decay_factor: 1.00004,
+                min_lr: .000001
+                },
+        termination_criterion: !obj:pylearn2.termination_criteria.And {
+            criteria: [
+                !obj:pylearn2.termination_criteria.MonitorBased {
+                    channel_name: "valid_y_misclass",
+                    prop_decrease: 0.,
+                    N: 25
+                },
+                !obj:pylearn2.termination_criteria.EpochCounter {
+                    max_epochs: 200
+                }
+            ]
+        },
+    },
+    extensions: [
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+             channel_name: 'valid_y_misclass',
+             save_path: %(filename)s,
+        },
+        !obj:pylearn2.training_algorithms.learning_rule.MomentumAdjustor {
+             start: 1,
+             saturate: 20,
+             final_momentum: .9
+            }
+    ]
+}
