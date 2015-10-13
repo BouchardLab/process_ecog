@@ -1,0 +1,85 @@
+!obj:pylearn2.train.Train {
+    dataset: !obj:pylearn2.datasets.transformer_dataset.TransformerDataset {
+        raw: &train !obj:pylearn2.datasets.ecog.ECoG {
+              filename: '${PYLEARN2_DATA_PATH}/ecog/%(data_file)s',
+              which_set: %(train_set)s,
+              center: %(center)s,
+              fold: %(fold)i,
+              level_classes: %(level_classes)s,
+        },
+        transformer: !obj:pylearn2.data_augmentation.ScaleAugmentation {
+            space: &space !obj:pylearn2.space.VectorSpace {
+                dim: 21930,
+                },
+            },
+    },
+    model: !obj:pylearn2.models.mlp.MLP {
+            input_space: *space,
+            layers: [ 
+                     %(layer_string)s
+                        ],
+    },
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        batch_size: %(batch_size)s,
+        learning_rate: %(lr)f,
+        train_iteration_mode: 'sequential',
+        monitoring_dataset:
+            {
+                'train' : !obj:pylearn2.datasets.ecog.ECoG {
+                                filename: '${PYLEARN2_DATA_PATH}/ecog/%(data_file)s',
+                                which_set: 'train',
+                                center: %(center)s,
+                                fold: %(fold)i,
+                                level_classes: %(level_classes)s,
+                          },
+                'valid' : !obj:pylearn2.datasets.ecog.ECoG {
+                                filename: '${PYLEARN2_DATA_PATH}/ecog/%(data_file)s',
+                                which_set: 'valid',
+                                center: %(center)s,
+                                fold: %(fold)i,
+                                level_classes: %(level_classes)s,
+                          },
+                'test' : !obj:pylearn2.datasets.ecog.ECoG {
+                                filename: '${PYLEARN2_DATA_PATH}/ecog/%(data_file)s',
+                                which_set: 'test',
+                                center: %(center)s,
+                                fold: %(fold)i,
+                                level_classes: %(level_classes)s,
+                          },
+            },
+        monitoring_batch_size: %(batch_size)s,
+        monitor_iteration_mode: 'sequential',
+        cost: %(cost_string)s
+        learning_rule: !obj:pylearn2.training_algorithms.learning_rule.Momentum {
+            init_momentum: .5,
+            nesterov_momentum: True
+        },
+        update_callbacks: !obj:pylearn2.training_algorithms.sgd.ExponentialDecay {
+            decay_factor: %(decay_factor)f,
+            min_lr: %(min_lr)f
+        },
+        termination_criterion: !obj:pylearn2.termination_criteria.And {
+            criteria: [
+                !obj:pylearn2.termination_criteria.MonitorBased {
+                    channel_name: "valid_y_misclass",
+                    prop_decrease: 0.,
+                    N: 10
+                },
+                !obj:pylearn2.termination_criteria.EpochCounter {
+                    max_epochs: %(max_epochs)i
+                }
+            ]
+        }
+    },
+    extensions: [
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+             channel_name: 'valid_y_misclass',
+             save_path: %(filename)s,
+        },
+    !obj:pylearn2.training_algorithms.learning_rule.MomentumAdjustor {
+        start: 1,
+        saturate: %(mom_sat)i,
+        final_momentum: %(final_mom)f,
+        }
+    ]
+}

@@ -1,7 +1,5 @@
 from __future__ import print_function
-import logging
-import math
-import os
+import logging, os
 import numpy as np
 
 import theano
@@ -15,9 +13,9 @@ from blocks.bricks import (Tanh, Initializable, Linear,
                            WEIGHT)
 from blocks.bricks.cost import SquaredError, CategoricalCrossEntropy, MisclassificationRate
 from blocks.bricks.base import application
-from blocks.bricks.recurrent import SimpleRecurrent
-from blocks.bricks.sequence_generators import (
-    SequenceGenerator, Readout, SoftmaxEmitter, LookupFeedback)
+from blocks.bricks.recurrent import SimpleRecurrent, LSTM
+from blocks.bricks.sequence_generators import (SequenceGenerator,
+        Readout, SoftmaxEmitter, LookupFeedback)
 from blocks.config import config
 from blocks.graph import ComputationGraph
 from blocks.serialization import load_parameter_values
@@ -43,42 +41,67 @@ config.recursion_limit = 100000
 floatX = theano.config.floatX
 logger = logging.getLogger(__name__)
 
-x_dim = 85
-y_dim = 57
 
 dict_to_act = {'Tanh': Tanh,
                'Logistic': Logistic,
                'Rectifier': Rectifier}
 dict_to_init = {'isotropic': IsotropicGaussian}
+dict_to_rec = {'rnn': SimpleRecurrent,
+               'crnn': SimpleContinuousRecurrent,
+               'lstm': LSTM}
 
-def train_model(data, opt_params, static_params):
+
+class ECoGRNN(Initializable):
+    """
+    RNN for ecog.
+    """
+    def __init__(self, opt_params, static_params, **kwargs):
+        super(ECoGRNN, self).__init__(**kwargs)
+        x_dim = static_params['x_dim']
+        y_dim = static_params['y_dim']
+
+        self.x_to_h = Linear(name='x_to_h',
+                input_dim=x_dim,
+                output_dim=opt_params['rec_dim0'])
+        self.rec = SimpleContinuousRecurrent(activation=dict_to_act[opt_params['rec_layer_act']](),
+                dim=opt_params['rec_dim0'],
+                name='rec')
+        self.h_to_y = Linear(name='h_to_y',
+                input_dim=opt_params['rec_dim0'],
+                output_dim=y_dim)
+        self.final_trans = Softmax()
+
+    def _fprop(self, inputs, targets):
+        x_transform = self.x_to_h.apply(inputs.dimshuffle(1, 0, 2))
+        h = self.rec.apply(x_transform)
+        y_hat = self.h_to_y.apply(h)
+        shape = y_hat.shape
+        y_hat_time = self.final_trans.apply(y_hat.reshape((tensor.prod(shape[:-1]),
+            shape[-1]))).reshape(shape)
+        y_hat = y_hat_time
+        return y_hat
+
+    @application
+    def cost(self, inputs, targets):
+        x_transform = self.x_to_h.apply(inputs.dimshuffle(1, 0, 2))
+        h = self.rec.apply(x_transform)
+        y_hat = self.h_to_y.apply(h)
+        shape = y_hat.shape
+        y_hat_time = self.final_trans.apply(y_hat.reshape((tensor.prod(shape[:-1]),
+            shape[-1]))).reshape(shape)
+        y_hat = y_hat_time.mean(0)
+        y_hat.name = 'y_hat'
+        cost = self.final_trans.categorical_cross_entropy(y, y_hat)
+        return cost
+
+def train_model(job_id, data, opt_params, static_params):
+    network = ECoGRNN(opt_params, static_params, name='ecog')
 
     print('Bulding model...')
     x = tensor.tensor3('x', dtype=floatX)
     y = tensor.ivector('y')
 
-
-    x_to_h = Linear(name='x_to_h',
-            input_dim=x_dim,
-            output_dim=opt_params['rec_dim0'])
-    x_transform = x_to_h.apply(x.dimshuffle(1, 0, 2))
-    rec = SimpleContinuousRecurrent(activation=dict_to_act[opt_params['rec_layer_act']](),
-            dim=opt_params['rec_dim0'],
-            name='rec')
-    h = rec.apply(x_transform)
-    h_to_y = Linear(name='h_to_y',
-            input_dim=opt_params['rec_dim0'],
-            output_dim=y_dim)
-    y_hat = h_to_y.apply(h)
-    shape = y_hat.shape
-    y_hat_time = Softmax().apply(y_hat.reshape((tensor.prod(shape[:-1]),
-        shape[-1]))).reshape(shape)
-    y_hat = y_hat_time.mean(0)
-
-    y_hat.name = 'y_hat'
-
     print('Defining Cost...')
-    cost = CategoricalCrossEntropy().apply(y, y_hat)
     cost.name = 'xent'
     misclassification = MisclassificationRate().apply(y, y_hat)
     misclassification.name = 'misclass'
@@ -130,11 +153,6 @@ def train_model(data, opt_params, static_params):
     main_loop.run()
 
     predict = theano.function([x], y_hat_time)
-    sp, st = data[-1]
-    ds = st.dataset
-    num_examples = ds.num_examples
-    features = ds.indexables[ds.sources.index('x')]
-    targets = ds.indexables[ds.sources.index('y')]
     predictions = predict(features)
     time_pts = range(predictions.shape[0])
     with PdfPages('output.pdf') as pdf:

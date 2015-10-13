@@ -35,9 +35,11 @@ def filter_params(kwargs):
     return kwargs
 
 def ecog_static_params():
-    audio = False
-    monitor_batch_size = 100
-    folds = 10
-    rval = {'level_classes': True,
-            'center': True}
-    return (audio, monitor_batch_size, folds, rval)
+    ds_params = {'level_classes': True,
+                 'center': True}
+    static_params = {'audio': False,
+                     'monitor_batch_size': 100,
+                     'folds': 10,
+                     'x_dim': 85,
+                     'y_dim': 57}
+    return (ds_params, static_params)
