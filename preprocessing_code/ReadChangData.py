@@ -23,11 +23,11 @@ def makeD_multi(pth, blocks, tokens, align_window=None, dtype='HG'):
         for iblock, block in enumerate(blocks):
             print 'Processing block ' + str(block)
             blockname = subject + '_B' + str(block)
-            blockpath = pth + blockname + '/'
+            blockpath = os.path.join(pth, blockname)
             #####
             #convert parseout to dataframe
-            textgrid_path = blockpath + blockname + '_transcription_final.TextGrid'
-            lab_path = blockpath + blockname + '_transcription_final.lab'
+            textgrid_path = os.path.join(blockpath, blockname + '_transcription_final.TextGrid')
+            lab_path = os.path.join(blockpath, blockname + '_transcription_final.lab')
             if os.path.isfile(textgrid_path):
                 parseout = parseTextGrid(textgrid_path)
             elif os.path.isfile(lab_path):
@@ -41,17 +41,22 @@ def makeD_multi(pth, blocks, tokens, align_window=None, dtype='HG'):
                 stop = df['stop'][match & (df['mode'] == 'speak')].values
                 start = df['start'][match & (df['mode'] == 'speak')].values
 
-                stop_times[this_label] = np.hstack((stop_times[this_label],stop.astype(float))) if stop_times[this_label].size else stop.astype(float)
-                start_times[this_label] = np.hstack((start_times[this_label],start.astype(float))) if start_times[this_label].size else start.astype(float)
-                D[this_label] = np.dstack((D[this_label],run_makeD(blockpath,event_times,
-                        align_window,dt = dtype))) if D[this_label].size else run_makeD(blockpath,event_times,align_window,dt = dtype)
+                stop_times[this_label] = np.hstack((stop_times[this_label], stop.astype(float))) if stop_times[this_label].size else stop.astype(float)
+                start_times[this_label] = np.hstack((start_times[this_label], start.astype(float))) if start_times[this_label].size else start.astype(float)
+                D[this_label] = np.dstack((D[this_label], run_makeD(blockpath,
+                                                                    event_times,
+                                                                    align_window,
+                                                                    dt=dtype))) if D[this_label].size else run_makeD(blockpath,
+                                                                                                                     event_times,
+                                                                                                                     align_window,
+                                                                                                                     dt=dtype)
 
         save_table_file(fname,dict(D))
         save_table_file(fname[:-3]+'stops.hf5',stop_times)
         save_table_file(fname[:-3]+'starts.hf5',start_times)
     else:
         print 'File found; Loading...'
-        D = open_D_table(fname,tokens)
+        D = open_D_table(fname, tokens)
         stop_times = open_D_table(fname[:-3]+'stops.hf5',tokens)
         start_times = open_D_table(fname[:-3]+'starts.hf5',tokens)
         print 'Loaded'
@@ -100,18 +105,18 @@ def run_makeD(blockpath, times, t_window, dt, zscr='whole'):
                 trange = 5
 
 
-        D = makeD(hg,fs_hg, times, t_window, bad_times=bad_times, bad_electrodes=bad_electrodes)
+        D = makeD(hg, fs_hg, times, t_window, bad_times=bad_times, bad_electrodes=bad_electrodes)
 
         return D
 
     def form():
         F = loadForm(blockpath)
-        D = makeD(F,100,times,t_window,bad_times = np.array([]), bad_electrodes = np.array([]))
+        D = makeD(F, 100, times, t_window, bad_times=np.array([]), bad_electrodes=np.array([]))
 
         return D
 
     options = {'HG' : HG,
-        'form' : form,}
+               'form' : form}
 
     D = options[dt]()
 
@@ -186,6 +191,13 @@ def open_D_table(fname, tokens):
         for n in tokens:
             D[n] = tf.root.__getattr__(n).read()
     return D
+
+def save_table_file(filename, filedict):
+    """Saves the variables in [filedict] in a hdf5 table file at [filename].
+    """
+    with tables.openFile(filename, mode="w", title="save_file") as hf:
+        for vname, var in filedict.items():
+            hf.createArray("/", vname, var)
 
 def parseTextGrid(fname):
     """
@@ -333,15 +345,6 @@ def load_anatomy(subj_dir):
 
     return electrode_labels
 
-
-
-
-def save_table_file(filename, filedict):
-    """Saves the variables in [filedict] in a hdf5 table file at [filename].
-    """
-    with tables.openFile(filename, mode="w", title="save_file") as hf:
-        for vname, var in filedict.items():
-            hf.createArray("/", vname, var)
 
 
 def loadBadElectrodes(blockpath):
