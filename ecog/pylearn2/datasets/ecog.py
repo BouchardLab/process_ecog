@@ -60,8 +60,7 @@ class ECoG(dense_design_matrix.DenseDesignMatrix):
                  two_headed=False,
                  randomize_labels=False,
                  frac_train=None,
-                 pm_aug_range=None,
-                 load_all=None, cache_size=400000000):
+                 pm_aug_range=None):
         self.args = locals()
 
 
@@ -106,7 +105,7 @@ class ECoG(dense_design_matrix.DenseDesignMatrix):
                 assert not vowel_prediction
             with h5py.File(filename,'r') as f:
                 X = f['out/D'].value[:, np.newaxis, ...]
-                y = f['out/labs'].value
+                y = np.squeeze(f['out/labs'].value)-1
                 raise NotImplemetedError
                 if two_headed:
                     assert not consonant_prediction
@@ -125,6 +124,15 @@ class ECoG(dense_design_matrix.DenseDesignMatrix):
                     tile_len = X_aug.shape[0]
                     y_aug = y[np.newaxis,...]
                     y_aug = np.tile(y, (tile_len, 1, 1))
+
+        if two_headed:
+            y_labels = None
+        elif consonant_prediction:
+            y_labels = 19
+        elif vowel_prediction:
+            y_labels = 3
+        else:
+            y_labels = 57
             
         rng = np.random.RandomState(seed)
 
@@ -272,11 +280,18 @@ class ECoG(dense_design_matrix.DenseDesignMatrix):
         if center:
             topo_view = topo_view-self.train_mean[np.newaxis,...]
 
+        kwargs = {}
+        kwargs['axes'] = ('b', 0, 1, 'c')
+        if y_labels is not None:
+            if y_final.ndim > 1:
+                y_final = y_final.argmax(axis=1)
+            y_final = y_final.astype(int)
+            kwards['y_labels'] = y_labels
+        else:
+            y_final = y_final.astype('float32')
+
         super(ECoG, self).__init__(topo_view=topo_view.astype('float32'),
-                                    y=y_final.astype('float32'),
-                                    #load_all=load_all,
-                                    #cache_size=cache_size,
-                                    axes=('b',0,1,'c'))
+                                   y=y_final, **kwargs)
 
     def get_valid_set(self):
         """
