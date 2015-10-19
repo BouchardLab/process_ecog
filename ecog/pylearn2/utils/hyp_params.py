@@ -1,7 +1,8 @@
 import decimal, json, os, yaml
+from ecog.pylearn2.utils.dataset_params import data_dims
 
 def get_params(json_file):
-
+    save_path = os.path.join(os.environ['PYLEARN2_MODEL_PATH'], 'ecog')
     fixed_params = {'train_set': 'train',
                     'frac_train': 1.,
                     'pm_aug_range': 10,
@@ -21,7 +22,7 @@ def get_params(json_file):
                     'audio_file': 'audio_EC2_CV_mcep.h5',
                     'init_type': 'istdev',
                     'script_folder': '.',
-                    'scratch': 'exps'}
+                    'scratch': save_path}
 
     out_dim = 57
     if fixed_params['consonant_prediction']:

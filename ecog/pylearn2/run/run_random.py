@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 import os
-from run_folds import get_result
-from hyp_params import get_params, make_dir
+from ecog.pylearn2.utils.run_folds import get_result
+from ecog.pylearn2.utils.hyp_params import get_params, make_dir
 import numpy as np
 
 def main():
     print 'Imports done...'
-    json_file = 'spearmint/config.json'
+    json_file = os.environ['SPEARMINT_JSON_PATH']
     opt_params, fixed_params = get_params(json_file)
 
     seed = 20150427

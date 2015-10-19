@@ -1,13 +1,13 @@
 {
     "language"        : "PYTHON",
-    "main-file"       : "run_spearmint.py",
-    "experiment-name" : "lda_pca",
+    "main-file"       : "run/run_spearmint.py",
+    "experiment-name" : "test",
     "likelihood"      : "GAUSSIAN",
     "resources"       : {
         "my-machine" : {
             "scheduler" : "local",
             "max-concurrent" : 1,
-            "max-finished-jobs" : 100
+            "max-finished-jobs" : 3
         }
     },
     "variables" : {
