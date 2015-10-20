@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 __author__ = 'David Conant, Jesse Livezey'
 
-import argparse, h5py, re, os, pdb, glob, csv
+import argparse, h5py, re, os, glob, csv
 import numpy as np
 import scipy as sp
 import scipy.stats as stats
@@ -21,14 +21,15 @@ def htk_to_hdf5(path, blocks, task, align_window=None, data_type='HG', baseline=
         Path to subject folder.
     blocks : list of ints
         Blocks from which data is gathered.
-    token : list of str
-        Tokens to be extracted.
+    task : str
+        Type of tokens to be extracted.
     align_window : list of two ints
         Time window in seconds around each token.
     data_type : str
         Type of data to use.
 
     Returns
+    -------
     D : dict
         Dictionary containing tokens as keys and data as array.
     anat : str
@@ -37,7 +38,6 @@ def htk_to_hdf5(path, blocks, task, align_window=None, data_type='HG', baseline=
         Dictionary of start times per token.
     stop_times : dict
         Dictionary of stop times per token.
-    -------
     """
 
     if task == 'CV':

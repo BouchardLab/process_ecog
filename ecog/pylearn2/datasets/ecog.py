@@ -61,14 +61,8 @@ class ECoG(dense_design_matrix.DenseDesignMatrix):
                  randomize_labels=False,
                  frac_train=None,
                  pm_aug_range=None):
+
         self.args = locals()
-
-
-        if load_all is None:
-            if which_set == 'augment':
-                load_all = False
-            else:
-                load_all = True
 
         if which_set not in ['train', 'valid', 'test', 'augment']:
             raise ValueError(
@@ -99,10 +93,10 @@ class ECoG(dense_design_matrix.DenseDesignMatrix):
                     y_aug = y[np.newaxis,...]
                     y_aug = np.tile(y, (tile_len, 1, 1))
         elif ext == 'mat':
-                assert not two_headed
-                assert not (which_set == 'augment')
-                assert not consonant_prediction
-                assert not vowel_prediction
+            assert not two_headed
+            assert not (which_set == 'augment')
+            assert not consonant_prediction
+            assert not vowel_prediction
             with h5py.File(filename,'r') as f:
                 X = f['out/D'].value[:, np.newaxis, ...]
                 y = np.squeeze(f['out/labs'].value)-1
@@ -286,7 +280,7 @@ class ECoG(dense_design_matrix.DenseDesignMatrix):
             if y_final.ndim > 1:
                 y_final = y_final.argmax(axis=1)
             y_final = y_final.astype(int)
-            kwards['y_labels'] = y_labels
+            kwargs['y_labels'] = y_labels
         else:
             y_final = y_final.astype('float32')
 
