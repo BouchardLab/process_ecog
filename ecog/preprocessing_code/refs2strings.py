@@ -14,6 +14,6 @@ def get_token_ids(filename):
             token names and ids
     """
     f = h5py.File(filename,'r')
-    get_token = lambda ref: f[ref].value.tostring().decode("utf-16")
+    get_token = lambda ref: f[ref].value.tostring().decode("utf-16").lower()
     return zip(map(get_token,f['out/slist'][0]),np.unique(f['out/labs'].value.astype('int')))
 
