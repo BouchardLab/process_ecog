@@ -30,8 +30,8 @@ def downsampleEcog(X,nf,of):
     This script uses the python package samplerate found here:
     https://pypi.python.org/pypi/scikits.samplerate 
     
-    This package provides a better replacement of Matlab's resample function
-    than the Scipy. To install this package follow the instructions in 
+    This package provides a better replacement of Matlab's resample 
+    function than Scipy. To install this package follow the instructions in 
     samplerate_installation.txt
     
     This script is a Python translation of Ben Dichter's original Matlab
