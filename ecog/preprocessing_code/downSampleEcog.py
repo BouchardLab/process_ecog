@@ -34,7 +34,7 @@ def downsampleEcog(X,nf,of):
     than the Scipy. To install this package follow the instructions in 
     samplerate_installation.txt
     
-    This script is a translation to Python of the Ben Dichter's original Matlab
+    This script is a Python translation of Ben Dichter's original Matlab
     script.
 
     Author: Alex Bujan
