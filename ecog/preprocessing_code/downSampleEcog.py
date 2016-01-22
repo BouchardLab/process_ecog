@@ -2,7 +2,7 @@ from __future__ import division
 import numpy as np
 from scikits.samplerate import resample
 
-def downsampleEcog(X,nf,of)
+def downsampleEcog(X,nf,of):
     """Down-samples the ECoG signal from the original sampling frequency (of)
         to a new frequency (nf)
     
