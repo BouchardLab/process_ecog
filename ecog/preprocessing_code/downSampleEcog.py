@@ -39,10 +39,6 @@ def downsampleEcog(X,nf,of):
 
     Author: Alex Bujan
     """
-    nf = np.round(nf/400)*2**11
-
-    of = np.round(of/3.0518e3)*5**6
-
     Xds = np.zeros(X.shape)
 
     for i in xrange(X.shape[0]):
