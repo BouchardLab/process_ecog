@@ -29,17 +29,17 @@ def downsampleEcog(X,nf,of):
 
     This script uses the python package samplerate found here:
     https://pypi.python.org/pypi/scikits.samplerate 
-    
+
     This package provides a better replacement of Matlab's resample 
     function than Scipy. To install this package follow the instructions in 
     samplerate_installation.txt
-    
+
     This script is a Python translation of Ben Dichter's original Matlab
     script.
 
     Author: Alex Bujan
     """
-    nf = np.round(nf/400.)*2**11
+    nf = np.round(nf/400)*2**11
 
     of = np.round(of/3.0518e3)*5**6
 
