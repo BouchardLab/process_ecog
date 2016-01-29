@@ -10,7 +10,7 @@ def applyHilbertTransform(X,rate,center,sd):
     Parameters
     ----------
     X   : array
-            Bad data, dimensions (n_channels, n_timePoints)
+            ECoG data, dimensions (n_channels, n_timePoints)
 
     rate : float
             Number of samples per second
@@ -25,7 +25,7 @@ def applyHilbertTransform(X,rate,center,sd):
     -------
 
     Xc   : array
-            bandpassed analytical signal (dtype: complex)
+            Bandpassed analytical signal (dtype: complex)
 
     """
     #frequencies
