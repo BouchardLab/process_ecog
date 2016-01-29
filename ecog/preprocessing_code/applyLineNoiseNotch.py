@@ -32,7 +32,7 @@ def applyLineNoiseNotch(X,sampling_rate=400.):
     nyquist_freq = sampling_rate/2
     f0 = np.array([0.,59.,59.5,60.5,61.,nyquist_freq])
     for i in xrange(3):
-        fil = firwin2(1000+1,(f0+60*i)/nyquist_freq,[1,1,0,0,1,1])
+        fil = firwin2(1000+1,(f0+np.array([0,60,60,60,60,0])*i)/nyquist_freq,[1,1,0,0,1,1])
         X   = filtfilt(fil,1,X)
     return X
 
