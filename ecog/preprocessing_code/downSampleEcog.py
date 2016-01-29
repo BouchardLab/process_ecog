@@ -39,10 +39,12 @@ def downsampleEcog(X,nf,of):
 
     Author: Alex Bujan
     """
-    Xds = np.zeros(X.shape)
 
     for i in xrange(X.shape[0]):
-        Xds[i] = resample(X[i],nf/of,'sinc_best')
+        X_tmp = resample(X[i],nf/of,'sinc_best')
+        if i==0:
+            Xds = np.zeros((X.shape[0],len(X_tmp)))
+        Xds[i] = X_tmp.copy()
 
     return Xds
 
