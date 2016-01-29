@@ -2,7 +2,7 @@ from __future__ import division
 import numpy as np
 from scikits.samplerate import resample
 
-def downsampleEcog(X,nf,of):
+def downsampleEcog(X,new,old):
     """Down-samples the ECoG signal from the original sampling frequency (of)
         to a new frequency (nf)
     
@@ -12,10 +12,10 @@ def downsampleEcog(X,nf,of):
     X   : array
             ECoG data, dimensions (n_channels, n_timePoints)
 
-    nf  : float
+    new : float
             New sampling frequency
 
-    of  : float
+    old : float
             Original sampling frequency
 
     Returns
@@ -39,12 +39,10 @@ def downsampleEcog(X,nf,of):
 
     Author: Alex Bujan
     """
-
     for i in xrange(X.shape[0]):
-        X_tmp = resample(X[i],nf/of,'sinc_best')
+        X_tmp = resample(X[i],new/old,'sinc_best')
         if i==0:
             Xds = np.zeros((X.shape[0],len(X_tmp)))
         Xds[i] = X_tmp.copy()
-
     return Xds
 
