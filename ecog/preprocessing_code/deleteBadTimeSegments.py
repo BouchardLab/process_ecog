@@ -2,6 +2,8 @@ from __future__ import division
 import numpy as np
 from scipy.io import loadmat
 
+__authors__ = "Alex Bujan"
+
 def deleteBadTimeSegments(X,sampling_rate,matFile):
     """Deletes time sections of data containing artifacts.
     

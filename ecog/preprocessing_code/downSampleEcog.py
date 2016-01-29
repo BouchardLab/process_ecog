@@ -2,6 +2,8 @@ from __future__ import division
 import numpy as np
 from scikits.samplerate import resample
 
+__authors__ = "Alex Bujan"
+
 def downsampleEcog(X,new,old):
     """Down-samples the ECoG signal from the original sampling frequency (of)
         to a new frequency (nf)
@@ -34,10 +36,6 @@ def downsampleEcog(X,new,old):
     function than Scipy. To install this package follow the instructions in 
     samplerate_installation.txt
 
-    This script is a Python translation of Ben Dichter's original Matlab
-    script.
-
-    Author: Alex Bujan
     """
     for i in xrange(X.shape[0]):
         X_tmp = resample(X[i],new/old,'sinc_best')
