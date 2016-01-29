@@ -31,16 +31,12 @@ def applyHilbertTransform(X,rate,center,sd):
     #frequencies
     T = X.shape[-1]
     freq = np.fft.fftfreq(T,1/rate)
-
     #heaviside kernel
     h = np.zeros(len(freq))
     h[freq>0]=2.
     h[0]=1.
-    
     #bandpass transfer function
     k  = np.exp((-(np.abs(freq)-center)**2)/(2*(sd**2)))
-
     #compute analytical signal
     Xc = np.fft.ifft(np.fft.fft(X)*h*k)
-    
     return Xc
