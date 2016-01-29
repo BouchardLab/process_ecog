@@ -10,7 +10,7 @@ def applyHilbertTransform(X,rate,center,sd):
     Parameters
     ----------
     X   : array
-            ECoG data, dimensions (n_channels, n_timePoints)
+            Input data, dimensions (n_channels, n_timePoints)
 
     rate : float
             Number of samples per second

@@ -11,7 +11,7 @@ def applyLineNoiseNotch(X,rate):
     ----------
 
     X   : array
-            input data, dimensions (n_channels, n_timePoints)
+            Input data, dimensions (n_channels, n_timePoints)
 
     rate : float
             Number of samples per second

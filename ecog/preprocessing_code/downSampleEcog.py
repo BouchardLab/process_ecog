@@ -12,7 +12,7 @@ def downsampleEcog(X,new,old):
     ----------
 
     X   : array
-            ECoG data, dimensions (n_channels, n_timePoints)
+            Input data, dimensions (n_channels, n_timePoints)
 
     new : float
             New sampling frequency
@@ -24,7 +24,7 @@ def downsampleEcog(X,new,old):
     -------
     
     Xds : array
-            Downsampled ECoG data, same dimensions as input data
+            Downsampled data
 
     Notes
     -----
