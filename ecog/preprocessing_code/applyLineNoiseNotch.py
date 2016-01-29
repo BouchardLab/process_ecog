@@ -11,7 +11,7 @@ def applyLineNoiseNotch(X,rate):
     ----------
 
     X   : array
-            ECoG data, dimensions (n_channels, n_timePoints)
+            input data, dimensions (n_channels, n_timePoints)
 
     rate : float
             Number of samples per second
@@ -20,7 +20,7 @@ def applyLineNoiseNotch(X,rate):
     -------
     
     X   : array
-            Denoised ECoG data, dimensions (n_channels, n_timePoints)
+            Denoised data, dimensions (n_channels, n_timePoints)
 
     """
     nyquist = rate/2

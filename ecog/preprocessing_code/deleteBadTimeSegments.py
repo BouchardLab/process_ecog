@@ -4,7 +4,7 @@ from scipy.io import loadmat
 
 __authors__ = "Alex Bujan"
 
-def deleteBadTimeSegments(X,sampling_rate,matFile):
+def deleteBadTimeSegments(X,rate,matFile):
     """Deletes time sections of data containing artifacts.
     
     Parameters
@@ -13,7 +13,7 @@ def deleteBadTimeSegments(X,sampling_rate,matFile):
     X   : array
             Bad data, dimensions (n_channels, n_timePoints)
 
-    sampling_rate : float
+    rate : float
             Number of samples per second
 
     matFile : string
@@ -27,7 +27,7 @@ def deleteBadTimeSegments(X,sampling_rate,matFile):
 
     """
     badSegmts = loadmat(matFile)['badTimeSegments']
-    T = np.arange(X.shape[1])/sampling_rate
+    T = np.arange(X.shape[1])/rate
     bp = np.searchsorted(T,badSegmts)
     ids = []
     for i in xrange(len(bp)):
