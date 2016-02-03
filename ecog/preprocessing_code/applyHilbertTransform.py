@@ -9,7 +9,7 @@ except:
 __authors__ = "Alex Bujan"
 
 
-def applyHilbertTransform(X,rate,center,sd,with_MPI=False):
+def applyHilbertTransform(X,rate,center,sd):
     """Apply bandpass filtering with Hilbert transform using a Gaussian kernel
     
     Parameters
@@ -33,9 +33,6 @@ def applyHilbertTransform(X,rate,center,sd,with_MPI=False):
             Bandpassed analytical signal (dtype: complex)
 
     """
-    if with_MPI:
-        from mpi4py import MPI
-        comm
     #frequencies
     T = X.shape[-1]
     freq = fftfreq(T,1/rate)
