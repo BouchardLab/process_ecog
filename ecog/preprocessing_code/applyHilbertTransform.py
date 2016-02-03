@@ -1,10 +1,15 @@
 from __future__ import division
 import numpy as np
 
+try:
+    from pyfftw.interfaces.numpy_fft import fft,ifft,fftfreq
+except:
+    from numpy.fft import fft,ifft,fftfreq
+
 __authors__ = "Alex Bujan"
 
 
-def applyHilbertTransform(X,rate,center,sd):
+def applyHilbertTransform(X,rate,center,sd,with_MPI=False):
     """Apply bandpass filtering with Hilbert transform using a Gaussian kernel
     
     Parameters
@@ -28,9 +33,12 @@ def applyHilbertTransform(X,rate,center,sd):
             Bandpassed analytical signal (dtype: complex)
 
     """
+    if with_MPI:
+        from mpi4py import MPI
+        comm
     #frequencies
     T = X.shape[-1]
-    freq = np.fft.fftfreq(T,1/rate)
+    freq = fftfreq(T,1/rate)
     #heaviside kernel
     h = np.zeros(len(freq))
     h[freq>0]=2.
@@ -38,5 +46,5 @@ def applyHilbertTransform(X,rate,center,sd):
     #bandpass transfer function
     k  = np.exp((-(np.abs(freq)-center)**2)/(2*(sd**2)))
     #compute analytical signal
-    Xc = np.fft.ifft(np.fft.fft(X)*h*k)
+    Xc = ifft(fft(X)*h*k)
     return Xc
