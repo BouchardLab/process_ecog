@@ -85,17 +85,7 @@ def htk_to_hdf5(path, blocks, task, align_window=None, align_pos = 0, data_type=
         blockname = subject + '_B' + str(block)
         blockpath = os.path.join(path, blockname)
         # Convert parseout to dataframe
-        textgrid_path = os.path.join(blockpath, blockname + '_transcription_final.TextGrid')
-        lab_path = os.path.join(blockpath, blockname + '_transcription_final.lab')
-        if os.path.isfile(textgrid_path):
-            parseout = transcripts.parse_final_TextGrid(textgrid_path)
-        elif os.path.isfile(lab_path):
-            parseout = transcripts.parse_Lab(lab_path)
-        else:
-            raise ValueError("Transcription not found at: "
-                             + str(textgrid_path) + " or: "
-                             + str(lab_path))
-
+        parseout = transcripts.parse(blockpath, blockname)
         df = make_df(parseout, block, subject)
 
         for ind, token in enumerate(tokens):

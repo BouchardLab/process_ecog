@@ -1,8 +1,32 @@
 __author__ = 'David Conant, Jesse Livezey'
 
-import re
+import re, os
 import numpy as np
 
+
+def parse(blockpath, blockname):
+    """
+    Find and parse transcript for block.
+
+    Parameters
+    ----------
+    blockpath : str
+        Path to block folder.
+    blockname : str
+        Block transcript file prefix.
+    """
+
+    textgrid_path = os.path.join(blockpath, blockname + '_transcription_final.TextGrid')
+    lab_path = os.path.join(blockpath, blockname + '_transcription_final.lab')
+    if os.path.isfile(textgrid_path):
+        parseout = transcripts.parse_TextGrid(textgrid_path)
+    elif os.path.isfile(lab_path):
+        parseout = transcripts.parse_Lab(lab_path)
+    else:
+        raise ValueError("Transcription not found at: "
+                         + str(textgrid_path) + " or: "
+                         + str(lab_path))
+    return parseout
 
 def parse_TextGrid(fname):
     """
