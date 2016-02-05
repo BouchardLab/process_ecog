@@ -19,9 +19,9 @@ def parse(blockpath, blockname):
     textgrid_path = os.path.join(blockpath, blockname + '_transcription_final.TextGrid')
     lab_path = os.path.join(blockpath, blockname + '_transcription_final.lab')
     if os.path.isfile(textgrid_path):
-        parseout = transcripts.parse_TextGrid(textgrid_path)
+        parseout = parse_TextGrid(textgrid_path)
     elif os.path.isfile(lab_path):
-        parseout = transcripts.parse_Lab(lab_path)
+        parseout = parse_Lab(lab_path)
     else:
         raise ValueError("Transcription not found at: "
                          + str(textgrid_path) + " or: "
@@ -128,26 +128,26 @@ def parse_Lab(fname):
 
     for ii, line in enumerate(content):
         _, time, token = line.split(' ')
-        isplosive = token[:-3] in ['d','t','b','p','g','k','gh']
+        isplosive = token[:-4] in ['d','t','b','p','g','k','gh']
         if (isplosive and '4' in token) or (not isplosive and '3' in token):
             _, start_time, start_token = content[ii-1].split(' ')
             _, stop_time, stop_token = content[ii+1].split(' ')
             # First phone
             tier.append('phone')
-            start.append(start_time/1.e7)
-            stop.append(time/1.e7)
-            label.append(token[:-3]
+            start.append(float(start_time)/1.e7)
+            stop.append(float(time)/1.e7)
+            label.append(token[:-4])
             # Second phone
             tier.append('phone')
-            start.append(time/1.e7)
-            stop.append(stop_time/1.e7)
-            label.append(token[-3:-1]
+            start.append(float(time)/1.e7)
+            stop.append(float(stop_time)/1.e7)
+            label.append(token[-4:-2])
             # Word
             tier.append('word')
-            start.append(time/1.e7)
-            stop.append(stop_time/1.e7)
+            start.append(float(start_time)/1.e7)
+            stop.append(float(stop_time)/1.e7)
             # TextGrid 'speak' convention
-            label.append(token[:-1] + '2')
+            label.append(token[:-2] + '2')
 
     return format_events(label, start, stop, tier)
 
@@ -165,18 +165,17 @@ def format_events(label, start, stop, tier):
     position = np.ones(label.size)*-1
 
 
-    #Determine hierarchy of events
+    # Determine hierarchy of events
     for ind in words:
-        if t == 1: #If no phrase tier, word is highest tier
-            position[ind] = 1
-            contained_by[ind] = -1;
+        position[ind] = 1
+        contained_by[ind] = -1;
 
-        #Find contained phonemes
+        # Find contained phonemes
         lower = start[ind] - 0.01
         upper = stop[ind] + 0.01
         startCandidates = np.where(start >= lower)[0]
         stopCandidates = np.where(stop <= upper)[0]
-        intersect = np.intersect1d(startCandidates,stopCandidates)
+        intersect = np.intersect1d(startCandidates, stopCandidates)
         cont = list(intersect)
         cont.remove(ind)
         contains[ind] = cont
@@ -196,4 +195,5 @@ def format_events(label, start, stop, tier):
     events = {'label': label, 'start': start, 'stop': stop,
               'tier': tier, 'contains': contains,
               'contained_by': contained_by, 'position': position}
+
     return events

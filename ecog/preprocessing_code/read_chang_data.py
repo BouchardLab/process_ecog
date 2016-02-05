@@ -86,6 +86,8 @@ def htk_to_hdf5(path, blocks, task, align_window=None, align_pos = 0, data_type=
         blockpath = os.path.join(path, blockname)
         # Convert parseout to dataframe
         parseout = transcripts.parse(blockpath, blockname)
+        print parseout
+        sys.exit()
         df = make_df(parseout, block, subject)
 
         for ind, token in enumerate(tokens):
