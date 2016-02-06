@@ -14,6 +14,18 @@ def parse(blockpath, blockname):
         Path to block folder.
     blockname : str
         Block transcript file prefix.
+
+    Returns
+    -------
+    parseout : dict
+        With keys:
+        label : an array of strings identifying each event according to the utterance
+        start : an array of the start times for each event
+        stop : an array of the stop times for each event
+        tier : an array specifying the tier (phoneme or word) for each event
+        contains : an array specifying the phonemes contained within each event
+        contained_by : an array specifying the words contiaining each event
+        position : the position of each phoneme within the word
     """
 
     textgrid_path = os.path.join(blockpath, blockname + '_transcription_final.TextGrid')
@@ -37,15 +49,17 @@ def parse_TextGrid(fname):
     Parameters:
     fname: filename of the TextGrid
 
-    Returns:
-    events (a dictionary) with keys:
-        label: an array of strings identifying each event according to the utterance
-        start: an array of the start times for each event
-        stop: an array of the stop times for each event
-        tier: an array specifying the tier (phoneme or word) for each event
-        contains: an array specifying the phonemes contained within each event
-        contained_by: an array specifying the words contiaining each event
-        position: the position of each phoneme within the word
+    Returns
+    -------
+    events : dict
+        With keys:
+        label : an array of strings identifying each event according to the utterance
+        start : an array of the start times for each event
+        stop : an array of the stop times for each event
+        tier : an array specifying the tier (phoneme or word) for each event
+        contains : an array specifying the phonemes contained within each event
+        contained_by : an array specifying the words contiaining each event
+        position : the position of each phoneme within the word
     """
 
     with open(fname) as tg:
@@ -60,17 +74,27 @@ def parse_TextGrid(fname):
     if any(['item [' in c for c in content]):
         # Normal formatting
         for ii, line in enumerate(content):
-            if 'item [1]:' in line: #iterate tier as they pass
-                t = 'phone'
-            elif 'item [2]:' in line: #iterate tier as they pass
+            if 'item [1]:' in line:
+                t = 'phoneme'
+            elif 'item [2]:' in line:
                 t = 'word'
-            elif 'text =' in line:
-                if line[20:-3] == 'sp' or not line[20:-3]:
+            elif 'item [3]:' in line:
+                t = 'phrase'
+            elif 'text =' in line and t != 'phrase':
+                if '"sp"' in line or '""' in line:
                     continue
 
-                label.append(line[20:-3])
-                start.append(float(content[ii-2][19:-2]))
-                stop.append(float(content[ii-1][19:-2]))
+                token = ''.join(re.findall('[a-zA-Z]',line.split(' ')[-2]))
+                if t == 'word':
+                    mode = re.findall('[0-9]',line.split(' ')[-2])
+                    if len(mode) == 1:
+                        assert mode[0] in ('1', '2')
+                        token += mode[0]
+                    else:
+                        token += '2'
+                label.append(token)
+                start.append(float(content[ii-2].split(' ')[-2]))
+                stop.append(float(content[ii-1].split(' ')[-2]))
                 tier.append(t)
     else:
         # Truncated formatting
@@ -79,7 +103,7 @@ def parse_TextGrid(fname):
             if 'IntervalTier' in line:
                 continue
             elif 'phone' in line:
-                t = 'phone'
+                t = 'phoneme'
                 continue
             elif 'word' in line:
                 t = 'word'
@@ -106,16 +130,19 @@ def parse_Lab(fname):
     ----------
     fname: filename of the 'lab' transcript
 
-    Returns:
-    events (a dictionary) with keys:
-        label: an array of strings identifying each event according to the utterance
-        start: an array of the start times for each event
-        stop: an array of the stop times for each event
-        tier: an array specifying the tier (phoneme or word) for each event
-        contains: an array specifying the phonemes contained within each event
-        contained_by: an array specifying the words contiaining each event
-        position: the position of each phoneme within the word
+    Returns
+    -------
+    events : dict
+        With keys:
+        label : an array of strings identifying each event according to the utterance
+        start : an array of the start times for each event
+        stop : an array of the stop times for each event
+        tier : an array specifying the tier (phoneme or word) for each event
+        contains : an array specifying the phonemes contained within each event
+        contained_by : an array specifying the words contiaining each event
+        position : the position of each phoneme within the word
     """
+
     start = []
     stop  = []
     tier = []
@@ -132,13 +159,13 @@ def parse_Lab(fname):
         if (isplosive and '4' in token) or (not isplosive and '3' in token):
             _, start_time, start_token = content[ii-1].split(' ')
             _, stop_time, stop_token = content[ii+1].split(' ')
-            # First phone
-            tier.append('phone')
+            # First phoneme
+            tier.append('phoneme')
             start.append(float(start_time)/1.e7)
             stop.append(float(time)/1.e7)
             label.append(token[:-4])
-            # Second phone
-            tier.append('phone')
+            # Second phoneme
+            tier.append('phoneme')
             start.append(float(time)/1.e7)
             stop.append(float(stop_time)/1.e7)
             label.append(token[-4:-2])
@@ -146,28 +173,54 @@ def parse_Lab(fname):
             tier.append('word')
             start.append(float(start_time)/1.e7)
             stop.append(float(stop_time)/1.e7)
-            # TextGrid 'speak' convention
             label.append(token[:-2] + '2')
 
     return format_events(label, start, stop, tier)
 
 def format_events(label, start, stop, tier):
-    label = np.array(label)
+    """
+    Add position information to events.
+
+    Parameters
+    ----------
+    label : list
+        List of event labels.
+    start : list
+        List of event start times.
+    stop : list
+        List of event stop times.
+    tier : list
+        Event tier.
+
+    Returns
+    -------
+    events : dict
+        With keys:
+        label : an array of strings identifying each event according to the utterance
+        start : an array of the start times for each event
+        stop : an array of the stop times for each event
+        tier : an array specifying the tier (phoneme or word) for each event
+        contains : an array specifying the phonemes contained within each event
+        contained_by : an array specifying the words contiaining each event
+        position : the position of each phoneme within the word
+    """
+
+    label = np.array([l.lower() for l in label])
     start = np.array(start)
     stop = np.array(stop)
     tier = np.array(tier)
 
-    phones = np.where(tier == 'phoneme')[0]
-    words = np.where(tier == 'word')[0]
+    phones, = np.where(tier == 'phoneme')
+    words, = np.where(tier == 'word')
 
-    contained_by = [-1]*label.size
-    contains = [-1]*label.size
-    position = np.ones(label.size)*-1
+    contained_by = [-1] * label.size
+    contains = [-1] * label.size
+    position = -1 * np.ones(label.size)
 
 
     # Determine hierarchy of events
     for ind in words:
-        position[ind] = 1
+        position[ind] = 0
         contained_by[ind] = -1;
 
         # Find contained phonemes
@@ -182,11 +235,10 @@ def format_events(label, start, stop, tier):
         for i in cont:
             contained_by[i] = ind
 
-
     for ind in phones:
-        #Find phonemes in the same word, position is order in list
+        # Find phonemes in the same word, position is order in list
         sameWord = np.where(np.asarray(contained_by) == contained_by[ind])[0]
-        position[ind] = np.where(sameWord == ind)[0] + 1
+        position[ind] = np.where(sameWord == ind)[0]
 
 
     contains = np.asarray(contains, dtype=object)

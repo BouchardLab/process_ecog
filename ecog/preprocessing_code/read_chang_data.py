@@ -12,7 +12,9 @@ import pandas as pd
 from utils import HTK, transcripts
 
 
-def htk_to_hdf5(path, blocks, task, align_window=None, align_pos = 0, data_type='HG', baseline='whole'):
+def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
+                align_window=None, align_pos = 0,
+                data_type='HG', baseline='whole'):
     """
     Process task data into segments with labels.
 
@@ -42,6 +44,9 @@ def htk_to_hdf5(path, blocks, task, align_window=None, align_pos = 0, data_type=
     stop_times : dict
         Dictionary of stop times per token.
     """
+
+    if output_folder is None:
+        output_folder = path
 
     if task == 'CV':
         tokens = sorted(['baa', 'bee', 'boo', 'daa', 'dee', 'doo', 'faa', 'fee', 'foo',
@@ -73,7 +78,7 @@ def htk_to_hdf5(path, blocks, task, align_window=None, align_pos = 0, data_type=
         return rval
 
     folder, subject = os.path.split(os.path.normpath(path))
-    fname = os.path.join(path, 'hdf5', (subject + '_' + block_str(blocks)
+    fname = os.path.join(output_folder, 'hdf5', (subject + '_' + block_str(blocks)
                                        + task + '_' + data_type + '_'
                                        + align_window_str(align_window) + '.h5'))
 
@@ -111,6 +116,18 @@ def htk_to_hdf5(path, blocks, task, align_window=None, align_pos = 0, data_type=
     return (D, anat, start_times, stop_times)
 
 def save_hdf5(fname, D, tokens):
+    """
+    Save processed data to hdf5.
+
+    Parameters
+    ----------
+    fname : str
+        Path to save output.
+    D : dict
+        Dictionary containing data for each token.
+    tokens : list of str
+        Tokens to save from D.
+    """
     tokens = sorted(tokens)
     labels = np.array(range(len(tokens)))
     X = None
@@ -333,11 +350,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Preprocess ECoG Data')
     parser.add_argument('path', help='path to subject folder')
     parser.add_argument('blocks', nargs='+', type=int)
+    parser.add_argument('-o', '--output_folder', default=None)
     parser.add_argument('-t', '--task', default='CV')
-    parser.add_argument('-a', '--align_window', nargs=2, type=float, default=[-.5, .79])
+    parser.add_argument('-w', '--align_window', nargs=2, type=float, default=[-.5, .79])
     parser.add_argument('-p', '--align_pos', type=int, default=1)
     parser.add_argument('-d', '--data_type', default='HG')
-    parser.add_argument('-l', '--baseline', default='whole')
+    parser.add_argument('-b', '--baseline', default='whole')
     args = parser.parse_args()
-    htk_to_hdf5(args.path, args.blocks, args.task, args.align_window,
-                args.align_pos, args.data_type, args.baseline)
+    htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
+                args.align_window, args.align_pos, args.data_type, args.baseline)
