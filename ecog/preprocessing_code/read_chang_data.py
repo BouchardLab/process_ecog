@@ -85,21 +85,20 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     D = dict((token, np.array([])) for token in tokens)
     stop_times = dict((token, np.array([])) for token in tokens)
     start_times = dict((token, np.array([])) for token in tokens)
+
     for iblock, block in enumerate(blocks):
         print 'Processing block ' + str(block)
         blockname = subject + '_B' + str(block)
         blockpath = os.path.join(path, blockname)
         # Convert parseout to dataframe
         parseout = transcripts.parse(blockpath, blockname)
-        print parseout
-        sys.exit()
-        df = make_df(parseout, block, subject)
+        df = make_df(parseout, block, subject, align_pos)
 
         for ind, token in enumerate(tokens):
             match = [token in t for t in df['label']]
-            event_times = df['start'][match & (df['mode'] == 'speak')]
-            stop = df['stop'][match & (df['mode'] == 'speak')].values
-            start = df['start'][match & (df['mode'] == 'speak')].values
+            event_times = df['align'][match & (df['mode'] == 'speak')]
+            start = event_times.values + align_window[0]
+            stop = event_times.values + align_window[1]
 
             stop_times[token] = (np.hstack((stop_times[token], stop.astype(float))) if 
                                  stop_times[token].size else stop.astype(float))
@@ -155,25 +154,46 @@ def save_hdf5(fname, D, tokens):
         f.create_dataset('tokens', data=tokens)
 
 
-def make_df(parseout, block, subject):
+def make_df(parseout, block, subject, align_pos, tier='word'):
+    """
+    Organize event data.
+
+    Parameters
+    ----------
+    parseout : dict
+        Dictionary from parsed transcript.
+    block : int
+        Block ID.
+    subject : str
+        Subject ID.
+    align_pos : int
+        Subelement in event to align to.
+    tier : str
+        Type of event to extract.
+    """
+
     keys = sorted(parseout.keys())
     datamat = [parseout[key] for key in keys]
     df = pd.DataFrame(np.vstack(datamat).T, columns=keys)
-    df = df[df['tier'] == 'word']
+    first_phones_per_word = df[df['tier'] == tier]['contains'].apply(lambda x: x[align_pos])
+    df_events = df[df['tier'] == tier]
 
     # Get rid of superfluous columns
-    df = df[['label','start', 'stop']]
+    df_events = df_events[['label','start', 'stop']]
+    df_events['align'] = df['start'].iloc[first_phones_per_word].astype(float).values
+    assert np.all(df_events['align'] >= df_events['start'])
+    assert np.all(df_events['align'] <= df_events['stop'])
 
     # Pull mode from label and get rid of number
-    df['mode'] = ['speak' if l[-1] == '2' else 'listen' for l in df['label']]
-    df['label'] = df['label'].apply(lambda x: x[:-1])
+    df_events['mode'] = ['speak' if l[-1] == '2' else 'listen' for l in df_events['label']]
+    df_events['label'] = df_events['label'].apply(lambda x: x[:-1])
 
-    df['label'] = df['label'].astype('category')
-    df['mode'] = df['mode'].astype('category')
-    df['block'] = block
-    df['subject'] = subject
+    df_events['label'] = df_events['label'].astype('category')
+    df_events['mode'] = df_events['mode'].astype('category')
+    df_events['block'] = block
+    df_events['subject'] = subject
 
-    return df
+    return df_events
 
 
 def run_makeD(blockpath, times, align_window, dt, zscr='whole'):
