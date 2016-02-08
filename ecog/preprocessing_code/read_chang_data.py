@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 __author__ = 'David Conant, Jesse Livezey'
 
-import sys
-import argparse, h5py, re, os, glob, csv
+import argparse, h5py, multiprocessing re, os, glob, csv
 import numpy as np
 import scipy as sp
 import scipy.stats as stats
@@ -89,33 +88,62 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     stop_times = dict((token, np.array([])) for token in tokens)
     start_times = dict((token, np.array([])) for token in tokens)
 
-    for iblock, block in enumerate(blocks):
-        print 'Processing block ' + str(block)
-        blockname = subject + '_B' + str(block)
-        blockpath = os.path.join(path, blockname)
-        # Convert parseout to dataframe
-        parseout = transcripts.parse(blockpath, blockname)
-        df = make_df(parseout, block, subject, align_pos)
-
-        for ind, token in enumerate(tokens):
-            match = [token in t for t in df['label']]
-            event_times = df['align'][match & (df['mode'] == 'speak')]
-            start = event_times.values + align_window[0]
-            stop = event_times.values + align_window[1]
-
-            stop_times[token] = (np.hstack((stop_times[token], stop.astype(float))) if 
-                                 stop_times[token].size else stop.astype(float))
-            start_times[token] = (np.hstack((start_times[token], start.astype(float))) if
-                                  start_times[token].size else start.astype(float))
-            D[token] = (np.dstack((D[token], run_makeD(blockpath, event_times,
-                                                       align_window, data_type=data_type))) if 
-                        D[token].size else run_makeD(blockpath, event_times, align_window, data_type=data_type))
+    pool = multiprocessing.Pool()
+    args = [(subject, block, path, tokens) for block in blocks]
+    results = pool.map(process_block, args)
+    for Bstart, Bstop, BD in results:
+        for token in tokens:
+            start_times[token] = (np.vstack((start_times[token], Bstart)) if
+                                  start_times[token].size else Bstart)
+            stop_times[token] = (np.vstack((stop_times[token], Bstop)) if
+                                 stop_times[token].size else Bstop)
+            D[token] = (np.vstack((D[token], BD[token])) if
+                        D[token].size else BD[token])
 
     print('Saving to: '+fname)
     save_hdf5(fname, D, tokens)
 
     anat = load_anatomy(path)
     return (D, anat, start_times, stop_times)
+
+def process_block(subject, block, path, tokens):
+    """
+    Process a single block.
+
+    Parameters
+    ----------
+    subject : str
+    block : int
+    path : str
+    tokens : list of str
+    """
+
+    print 'Processing block ' + str(block)
+    blockname = subject + '_B' + str(block)
+    blockpath = os.path.join(path, blockname)
+    # Convert parseout to dataframe
+    parseout = transcripts.parse(blockpath, blockname)
+    df = make_df(parseout, block, subject, align_pos)
+
+    D = dict((token, np.array([])) for token in tokens)
+    stop_times = dict((token, np.array([])) for token in tokens)
+    start_times = dict((token, np.array([])) for token in tokens)
+
+    for ind, token in enumerate(tokens):
+        match = [token in t for t in df['label']]
+        event_times = df['align'][match & (df['mode'] == 'speak')]
+        start = event_times.values + align_window[0]
+        stop = event_times.values + align_window[1]
+
+        start_times[token] = (np.vstack((start_times[token], start.astype(float))) if
+                              start_times[token].size else start.astype(float))
+        stop_times[token] = (np.vstack((stop_times[token], stop.astype(float))) if
+                             stop_times[token].size else stop.astype(float))
+        D[token] = (np.vstack((D[token], run_makeD(blockpath, event_times,
+                                                   align_window, data_type=data_type))) if
+                    D[token].size else run_makeD(blockpath, event_times, align_window, data_type=data_type))
+
+    return (start_times, stop_times, D)
 
 def save_hdf5(fname, D, tokens):
     """
@@ -206,10 +234,15 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='whole'):
     Parameters
     ----------
     blockpath : str
+        Path to block.
     event_times : list of float
+        Event alignment times.
     align_window : ndarray
+        Window around event alignment.
     data_type : str
+        Data type (e.g. 'HG', 'form').
     zscore : str
+        Method for zscoring data.
     """
 
     def HG():
@@ -255,26 +288,23 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
 
     Parameters
     ----------
-
-    Inputs:
-
-    Variable      Description                     Form                            Units
-    =========================================================================================
-    data          data to be time-aligned         np.array(n_elects x n_time)
-    fs_data       frequency of data seconds       double                          seconds
-    times         times to align the data to      np.array(1 x n_times)           seconds
-    align_window      window around alignment time    np.array(1 x 2)                 seconds
-                  (before is -ive)
-    bad_times     times when there are artifacts  np.array(n_bad_times x 2)       seconds
-    bad_electrodes list of bad electrodes         list of channel numbers
-                   starting at 0
+    data : ndarray (n_channels, n_time)
+        Timeseries data.
+    fs_data : float
+        Sampling frequency of data.
+    event_time : list of floats
+        Time (in seconds) of events.
+    align_window : ndarray
+        Window around event alignment.
+    bad_times : ndarray (n_windows, 2)
+        Start and stop points of bad times segments.
+    bad_electrodes : ndarray (n_electrodes,)
+        Indices of bad electrodes.
 
     Returns
     -------
-
-    Output:
-
-    D             Data aligned to times           np.array(n_elects x n_time_win x n_times)
+    D : ndarray (n_events, n_time, n_elects)
+        Event data aligned to event times.
     """
     if align_window is None:
         align_window = np.array([-1., 1.])
@@ -284,30 +314,49 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
         assert align_window[1] >= 0.
         assert align_window[0] < align_window[1]
 
-    D = nans((data.shape[0], np.ceil(np.diff(align_window)*fs_data), len(event_times)))
-    tt_data = np.arange(data.shape[1])/fs_data
+    D = nans((len(event_times), np.ceil(np.diff(align_window) * fs_data), data.shape[0]))
+    tt_data = np.arange(data.shape[1]) / fs_data
 
-    for itime, time in enumerate(event_times):
-        this_data = data[:,isin(tt_data, align_window + time)]
-        D[:,:this_data.shape[1],itime] = this_data
+    for ievent, time in enumerate(event_times):
+        event_data = data[:, isin(tt_data, align_window + time)].T
+        D[ievent] = event_data
 
     if bad_times.any():
-        good_trials = [not np.any(np.logical_and(bad_times,np.any(is_overlap(align_window + time, bad_times)))) for time in event_times]
-        D = D[:,:,good_trials]
+        good_trials = [not np.any(np.logical_and(bad_times,
+            np.any(is_overlap(align_window + time, bad_times))))
+            for time in event_times]
+        D = D[good_trials]
 
     if len(bad_electrodes):
-        bad_electrodes = bad_electrodes[bad_electrodes < D.shape[0]]
-        D[bad_electrodes,:,:] = np.nan
+        bad_electrodes = bad_electrodes[bad_electrodes < D.shape[3]]
+        D[:, :, bad_electrodes] = np.nan
 
     return D
 
 def load_HG(blockpath):
+    """
+    Reads in HTK data.
+
+    Parameters
+    ----------
+    blockpath : str
+        Path to block.
+
+    Returns
+    -------
+    hg : ndarray (n_channels, n_time)
+        High gamma data.
+    fs_hg : float
+        Sampling frequency of data.
+    """"
+
     htk_path = os.path.join(blockpath, 'HilbAA_70to150_8band')
     HTKout = HTK.readHTKs(htk_path)
     hg = HTKout['data']
-    fs_hg = HTKout['sampling_rate']/10000 # frequency in Hz
+    # Frequency in Hz
+    fs_hg = HTKout['sampling_rate']/10000
 
-    return(hg, fs_hg)
+    return (hg, fs_hg)
 
 def loadForm(blockpath):
     fname = glob.glob(os.path.join(blockpath + 'Analog', '*.ifc_out.txt'))
@@ -324,7 +373,8 @@ def load_anatomy(subj_dir):
 
     if anatomy_filename:
         anatomy = sp.io.loadmat(anatomy_filename[0])
-        electrode_labels = np.array([item[0][0] if len(item[0]) else '' for item in anatomy['electrodes'][0]])
+        electrode_labels = np.array([item[0][0] if len(item[0])
+                                     else '' for item in anatomy['electrodes'][0]])
 
     elif elect_labels_filename:
         a = sp.io.loadmat(os.path.join(subj_dir, 'elec_labels.mat'))
@@ -357,7 +407,7 @@ def load_bad_electrodes(blockpath):
             if be != '':
                 bad_electrodes.append(be)
 
-    bad_electrodes = np.array([int(be) for be in bad_electrodes])
+    bad_electrodes = np.array([int(be)-1 for be in bad_electrodes])
 
     return bad_electrodes
 
