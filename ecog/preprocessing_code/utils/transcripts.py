@@ -4,6 +4,8 @@ import re, os
 import numpy as np
 
 
+lab_time_conversion = 1.e7
+
 def parse(blockpath, blockname):
     """
     Find and parse transcript for block.
@@ -161,18 +163,18 @@ def parse_Lab(fname):
             _, stop_time, stop_token = content[ii+1].split(' ')
             # First phoneme
             tier.append('phoneme')
-            start.append(float(start_time)/1.e7)
-            stop.append(float(time)/1.e7)
+            start.append(float(start_time)/lab_time_conversion)
+            stop.append(float(time)/lab_time_conversion)
             label.append(token[:-4])
             # Second phoneme
             tier.append('phoneme')
-            start.append(float(time)/1.e7)
-            stop.append(float(stop_time)/1.e7)
+            start.append(float(time)/lab_time_conversion)
+            stop.append(float(stop_time)/lab_time_conversion)
             label.append(token[-4:-2])
             # Word
             tier.append('word')
-            start.append(float(start_time)/1.e7)
-            stop.append(float(stop_time)/1.e7)
+            start.append(float(start_time)/lab_time_conversion)
+            stop.append(float(stop_time)/lab_time_conversion)
             label.append(token[:-2] + '2')
 
     return format_events(label, start, stop, tier)

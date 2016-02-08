@@ -251,7 +251,10 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='whole'):
 
 def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_electrodes=None):
     """
-    Aligns data to time. Assumes constant sampling frequency
+    Extracts windows of aligned data. Assumes constant sampling frequency
+
+    Parameters
+    ----------
 
     Inputs:
 
@@ -265,6 +268,9 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
     bad_times     times when there are artifacts  np.array(n_bad_times x 2)       seconds
     bad_electrodes list of bad electrodes         list of channel numbers
                    starting at 0
+
+    Returns
+    -------
 
     Output:
 
@@ -331,7 +337,7 @@ def load_anatomy(subj_dir):
 
 def load_bad_electrodes(blockpath):
     """
-    Load a bad electrodes.
+    Load bad electrodes.
 
     Parameters
     ----------
@@ -356,7 +362,35 @@ def load_bad_electrodes(blockpath):
     return bad_electrodes
 
 def load_bad_times(blockpath):
-    return np.array([])
+    """
+    Load bad time segments.
+
+    Parameters
+    ----------
+    blockpath : str
+        Path to block to load bad electrodes from.
+
+    Returns
+    -------
+    bad_times : ndarray
+        Pairs of start and stop times for bad segments.
+    """
+
+    bad_times = []
+    try:
+        lab_time_conversion = transcripts.lab_time_conversion
+        with open(os.path.join(blockpath, 'Artifacts', 'bad_time_segments.lab'),'rt') as f:
+            lines = f.readlines()
+            for line in lines:
+                if 'e' in line:
+                    start, stop, _, _, _ = line.split(' ')
+                    bad_times.append([float(start)/lab_time_conversion, float(stop)/lab_time_conversion])
+    except IOError:
+        return np.array([])
+
+    bad_time = np.array(bad_times)
+
+    return bad_electrodes
 
 def nans(shape, dtype=float):
     """
@@ -370,18 +404,27 @@ def nans(shape, dtype=float):
     a.fill(np.nan)
     return a
 
-def is_overlap(time_window, times_window_array):
+def is_overlap(time_window, time_windows_array):
     """
-    Does time_window overlap with the time windows in times_window_array. Used for bad time segments
-    :param times: np.array(1,2)
-    :param times_array: np.array(x,2)
-    :return: TF
+    Does time_window overlap with the time windows in times_window_array.
+    Used for bad time segments.
+
+    Parameters
+    ----------
+    time_window : ndarray (2,)
+       Single window of time to compare.
+    time_windows_array : ndarray (n, 2)
+       Windows of time to compare against.
+
+    Returns
+    -------
+    Boolean overlap comparing time_window to each window in time_windows_array.
 
     """
-    def overlap(tw1,tw2):
+    def overlap(tw1, tw2):
         return not ((tw1[1] < tw2[0]) | (tw1[0] > tw2[1]))
 
-    return [overlap(time_window,this_time_window) for this_time_window in times_window_array]
+    return [overlap(time_window,this_time_window) for this_time_window in time_windows_array]
 
 def isin(tt, tbounds):
     """

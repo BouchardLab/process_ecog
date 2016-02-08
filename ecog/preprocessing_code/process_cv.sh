@@ -4,10 +4,11 @@
 #SBATCH -t 04:00:00
 #SBATCH -J process_data
 #SBATCH -o process_output.o%j
+# SBATCH --qos premium
 
 module load python
 module load h5py
-module load cython
+#module load cython
 #module swap numpy numpy/1.9.0_mkl
 #module swap scipy scipy/0.14.0_mkl
 
