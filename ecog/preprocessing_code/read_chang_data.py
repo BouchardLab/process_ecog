@@ -14,7 +14,7 @@ from utils import HTK, transcripts
 
 def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                 align_window=None, align_pos = 0,
-                data_type='HG', baseline='whole'):
+                data_type='HG', zscore='whole'):
     """
     Process task data into segments with labels.
 
@@ -66,6 +66,9 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         align_window = np.array([-1., 1.])
     else:
         align_window = np.array(align_window)
+        assert align_window[0] <= 0.
+        assert align_window[1] >= 0.
+        assert align_window[0] < align_window[1]
 
     def block_str(blocks):
         rval = 'blocks_'
@@ -105,8 +108,8 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
             start_times[token] = (np.hstack((start_times[token], start.astype(float))) if
                                   start_times[token].size else start.astype(float))
             D[token] = (np.dstack((D[token], run_makeD(blockpath, event_times,
-                                                       align_window, dt=data_type))) if 
-                        D[token].size else run_makeD(blockpath, event_times, align_window, dt=data_type))
+                                                       align_window, data_type=data_type))) if 
+                        D[token].size else run_makeD(blockpath, event_times, align_window, data_type=data_type))
 
     print('Saving to: '+fname)
     save_hdf5(fname, D, tokens)
@@ -196,29 +199,45 @@ def make_df(parseout, block, subject, align_pos, tier='word'):
     return df_events
 
 
-def run_makeD(blockpath, times, align_window, dt, zscr='whole'):
+def run_makeD(blockpath, event_times, align_window, data_type, zscore='whole'):
+    """
+    Extract requested data type.
+
+    Parameters
+    ----------
+    blockpath : str
+    event_times : list of float
+    align_window : ndarray
+    data_type : str
+    zscore : str
+    """
 
     def HG():
-        bad_electrodes = loadBadElectrodes(blockpath) -1
-        bad_times = np.array([]) #loadBadTimes(blockpath)
+        bad_electrodes = load_bad_electrodes(blockpath) -1
+        bad_times = load_bad_times(blockpath)
         hg, fs_hg = load_HG(blockpath)
 
         hg = hg[:256]
 
-        if zscr is 'whole':
+        if zscore == 'whole':
             hg = stats.zscore(hg, axis=1)
-        elif zscr is '30s':
-            raise NotImplementedError
-            for t in range(hg.shape[1]):
-                trange = 5
+        elif zscore == 'data':
+            tt_data = np.arange(hg.shape[1])/fs_hg
+            data_start = event_times.min() + align_window[0]
+            data_stop = event_times.max() + align_window[1]
+            data = hg[:, isin(tt_data, np.array([data_start, data_stop]))]
+            means = data.mean(axis=1, keepdims=True)
+            stds = data.std(axis=1, keepdims=True)
+            hg = (hg - means)/stds
 
 
-        D = makeD(hg, fs_hg, times, align_window, bad_times=bad_times, bad_electrodes=bad_electrodes)
+        D = makeD(hg, fs_hg, event_times, align_window,
+                  bad_times=bad_times, bad_electrodes=bad_electrodes)
 
         return D
 
     def form():
-        F = loadForm(blockpath)
+        F = load_form(blockpath)
         D = makeD(F, 100, times, align_window, bad_times=np.array([]), bad_electrodes=np.array([]))
 
         return D
@@ -226,11 +245,11 @@ def run_makeD(blockpath, times, align_window, dt, zscr='whole'):
     options = {'HG' : HG,
                'form' : form}
 
-    D = options[dt]()
+    D = options[data_type]()
 
     return D
 
-def makeD(data, fs_data, times, align_window=None, bad_times=None, bad_electrodes=None):
+def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_electrodes=None):
     """
     Aligns data to time. Assumes constant sampling frequency
 
@@ -255,16 +274,19 @@ def makeD(data, fs_data, times, align_window=None, bad_times=None, bad_electrode
         align_window = np.array([-1., 1.])
     else:
         align_window = np.array(align_window)
+        assert align_window[0] <= 0.
+        assert align_window[1] >= 0.
+        assert align_window[0] < align_window[1]
 
-    D = nans((data.shape[0], np.ceil(np.diff(align_window)*fs_data), len(times)))
+    D = nans((data.shape[0], np.ceil(np.diff(align_window)*fs_data), len(event_times)))
     tt_data = np.arange(data.shape[1])/fs_data
 
-    for itime, time in enumerate(times):
+    for itime, time in enumerate(event_times):
         this_data = data[:,isin(tt_data, align_window + time)]
         D[:,:this_data.shape[1],itime] = this_data
 
     if bad_times.any():
-        good_trials = [not np.any(np.logical_and(bad_times,np.any(is_overlap(align_window + time, bad_times)))) for time in times]
+        good_trials = [not np.any(np.logical_and(bad_times,np.any(is_overlap(align_window + time, bad_times)))) for time in event_times]
         D = D[:,:,good_trials]
 
     if len(bad_electrodes):
@@ -307,17 +329,34 @@ def load_anatomy(subj_dir):
 
     return electrode_labels
 
-def loadBadElectrodes(blockpath):
-    a = ''
+def load_bad_electrodes(blockpath):
+    """
+    Load a bad electrodes.
+
+    Parameters
+    ----------
+    blockpath : str
+        Path to block to load bad electrodes from.
+
+    Returns
+    -------
+    bad_electrodes : ndarray
+        Indices of bad electrodes.
+    """
+
+    bad_electrodes = []
     with open(os.path.join(blockpath, 'Artifacts', 'badChannels.txt'),'rt') as f:
-        rd = csv.reader(f, delimiter=' ')
-        for line in rd:
-            a += line
+        bes = csv.reader(f, delimiter=' ')
+        for be in bes:
+            if be != '':
+                bad_electrodes.append(be)
 
-    a = [num for num in a.split(' ') if num != '']
-    a = np.array([int(x) for x in list(a)])
+    bad_electrodes = np.array([int(be) for be in bad_electrodes])
 
-    return a
+    return bad_electrodes
+
+def load_bad_times(blockpath):
+    return np.array([])
 
 def nans(shape, dtype=float):
     """
@@ -353,12 +392,13 @@ def isin(tt, tbounds):
 
     :return:        1 x n bool          logical indicating if time is in any of the windows
     """
+
     #check if tbounds in np.array and if not fix it
     tbounds = np.array(tbounds)
 
     tf = np.zeros(tt.shape, dtype = 'bool')
 
-    if len(tbounds.shape) is 1:
+    if tbounds.ndim is 1:
         tf = (tt > tbounds[0]) & (tt < tbounds[1])
     else:
         for i in range(tbounds.shape[0]):
@@ -375,7 +415,7 @@ if __name__ == "__main__":
     parser.add_argument('-w', '--align_window', nargs=2, type=float, default=[-.5, .79])
     parser.add_argument('-p', '--align_pos', type=int, default=1)
     parser.add_argument('-d', '--data_type', default='HG')
-    parser.add_argument('-b', '--baseline', default='whole')
+    parser.add_argument('-b', '--zscore', default='whole')
     args = parser.parse_args()
     htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
-                args.align_window, args.align_pos, args.data_type, args.baseline)
+                args.align_window, args.align_pos, args.data_type, args.zscore)

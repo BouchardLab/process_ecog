@@ -177,6 +177,31 @@ def parse_Lab(fname):
 
     return format_events(label, start, stop, tier)
 
+def standardize_token(token):
+    """
+    Standardizations to make to tokens.
+
+    Parameters
+    ----------
+    token : str
+        Token to be standarized.
+
+    Returns
+    -------
+    token : str
+        Standardized token.
+    """
+    token = token.lower()
+    token = token.replace('uu', 'oo')
+    token = token.replace('ue', 'oo')
+    token = token.replace('gh', 'g')
+    # who?
+    # shaw?
+    # thaw?
+    # saw?
+
+    return token
+
 def format_events(label, start, stop, tier):
     """
     Add position information to events.
@@ -205,7 +230,7 @@ def format_events(label, start, stop, tier):
         position : the position of each phoneme within the word
     """
 
-    label = np.array([l.lower() for l in label])
+    label = np.array([standardize_token(l) for l in label])
     start = np.array(start)
     stop = np.array(stop)
     tier = np.array(tier)
