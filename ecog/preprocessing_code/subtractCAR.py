@@ -1,7 +1,7 @@
 from __future__ import division
 import numpy as np
 
-def subtractCAR(X,b_size=16)
+def subtractCAR(X,b_size=16):
 
     n,m = X.shape
     s = n//b_size
