@@ -21,7 +21,7 @@ def main():
     parser = OptionParser(usage)
 
     parser.add_option("--subject",type="string",default='GP31',\
-        help="Code of the subject")
+        help="Subject code")
 
     parser.add_option("--block",type="int",default=1,\
         help="Block number")
@@ -33,7 +33,7 @@ def main():
         help="Sampling rate of the processed signal (optional)")
 
     parser.add_option("--vsmc",action='store_true',\
-        dest='verbose',help="Include vSMC electrodes only (optional)")
+        dest='vsmc',help="Include vSMC electrodes only (optional)")
 
     parser.add_option("--ct",type="float",default=87.75,\
         help="Center frequency of the Gaussian filter (optional)")
