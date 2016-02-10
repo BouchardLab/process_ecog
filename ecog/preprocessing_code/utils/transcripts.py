@@ -60,7 +60,7 @@ def parse_TextGrid(fname):
         stop : an array of the stop times for each event
         tier : an array specifying the tier (phoneme or word) for each event
         contains : an array specifying the phonemes contained within each event
-        contained_by : an array specifying the words contiaining each event
+        contained_by : an array specifying the words containing each event
         position : the position of each phoneme within the word
     """
 
@@ -90,7 +90,6 @@ def parse_TextGrid(fname):
                 if t == 'word':
                     mode = re.findall('[0-9]',line.split(' ')[-2])
                     if len(mode) == 1:
-                        assert mode[0] in ('1', '2')
                         token += mode[0]
                     else:
                         token += '2'
@@ -194,9 +193,9 @@ def standardize_token(token):
         Standardized token.
     """
     token = token.lower()
-    token = token.replace('uu', 'oo')
-    token = token.replace('ue', 'oo')
-    token = token.replace('gh', 'g')
+    #token = token.replace('uu', 'oo')
+    #token = token.replace('ue', 'oo')
+    #token = token.replace('gh', 'g')
     # who?
     # shaw?
     # thaw?
