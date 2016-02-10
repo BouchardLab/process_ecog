@@ -74,7 +74,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
                             electrodes['anatomy']['postCG'][0][0][0]])-1
     else:
         elecs = electrodes-1
-    badElects = loadtxt('/%s/Artifacts/badChannels.txt'%b_path)-1
+    badElects = np.loadtxt('/%s/Artifacts/badChannels.txt'%b_path)-1
     elects = np.setdiff1d(elects,badElects)
 
     X = HTKoutR['data'][elects]
