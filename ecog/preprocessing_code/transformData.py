@@ -119,7 +119,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     """
 
     if store:
-        with h5py.File('%s/pcsd_data/%s_%s_AS_%.1f_%.1f.h5'%(path,subject,block,ct,sd)) as f:
+        with h5py.File('%s/pcsd_data/%s_%s_AS_%.1f_%.1f.h5'%(b_path,subject,block,ct,sd)) as f:
             f.attrs['sampling_rate'] = rate
             f.attrs['hilb_ct'] = ct
             f.attrs['hilb_sd'] = sd
