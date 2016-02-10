@@ -23,8 +23,8 @@ def main():
     parser.add_option("--subject",type="string",default='GP31',\
         help="Subject code")
 
-    parser.add_option("--block",type="int",default=1,\
-        help="Block number")
+    parser.add_option("--block",type="string",default='B1',\
+        help="Block number eg: 'B1'")
 
     parser.add_option("--path",type="string",default='',\
         help="Path to the data")
@@ -57,7 +57,7 @@ def main():
 def transform(path,subject,block,rate=400.,vsmc=True,\
               ct=87.75,sd=3.65):
 
-    b_path = '%s/%s/%S_B%s'%(path,subject,subject,block)
+    b_path = '%s/%s/%s_%s'%(path,subject,subject,block)
 
     """
     Load raw HTK files
@@ -110,7 +110,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     """
 
     if save:
-        with h5py.File('%s/pcsd_data/%s_B%s_AS_%.1f_%.1f.h5'%(path,subject,block,ct,sd)) as f:
+        with h5py.File('%s/pcsd_data/%s_%s_AS_%.1f_%.1f.h5'%(path,subject,block,ct,sd)) as f:
             f.attrs['sampling_rate'] = rate
             f.attrs['hilb_ct'] = ct
             f.attrs['hilb_sd'] = sd
