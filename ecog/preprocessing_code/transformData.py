@@ -68,7 +68,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     """
     Select electrodes
     """
-    electrodes = loadmat('%s/Anatomy/%s_anatomy.mat'%(path,subject))
+    electrodes = loadmat('%s/%s/Anatomy/%s_anatomy.mat'%(path,subject,subject))
     if vsmc:
         elects = np.hstack([electrodes['anatomy']['preCG'][0][0][0],\
                             electrodes['anatomy']['postCG'][0][0][0]])-1
