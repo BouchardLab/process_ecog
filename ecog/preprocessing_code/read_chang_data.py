@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 __author__ = 'David Conant, Jesse Livezey'
 
-import argparse, h5py, multiprocessing re, os, glob, csv
+import sys
+import argparse, h5py, multiprocessing, re, os, glob, csv
 import numpy as np
 import scipy as sp
 import scipy.stats as stats
@@ -89,7 +90,8 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     start_times = dict((token, np.array([])) for token in tokens)
 
     pool = multiprocessing.Pool()
-    args = [(subject, block, path, tokens) for block in blocks]
+    args = [(subject, block, path, tokens, align_pos, align_window, data_type)
+            for block in blocks]
     results = pool.map(process_block, args)
     for Bstart, Bstop, BD in results:
         for token in tokens:
@@ -106,7 +108,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     anat = load_anatomy(path)
     return (D, anat, start_times, stop_times)
 
-def process_block(subject, block, path, tokens):
+def process_block(args):
     """
     Process a single block.
 
@@ -117,9 +119,11 @@ def process_block(subject, block, path, tokens):
     path : str
     tokens : list of str
     """
+    
+    subject, block, path, tokens, align_pos, align_window, data_type = args
 
-    print 'Processing block ' + str(block)
     blockname = subject + '_B' + str(block)
+    print('Processing block ' + blockname)
     blockpath = os.path.join(path, blockname)
     # Convert parseout to dataframe
     parseout = transcripts.parse(blockpath, blockname)
@@ -163,15 +167,15 @@ def save_hdf5(fname, D, tokens):
     X = None
     y = None
     for label, token in zip(labels, tokens):
-        X_t = np.transpose(D[token], axes=(2, 0, 1))
+        X_t = D[token]
         if X is None:
             X = X_t
         else:
-            X = np.append(X, X_t, axis=0)
+            X = np.vstack((X, X_t))
         if y is None:
             y = label * np.ones(X_t.shape[0], dtype=int)
         else:
-            y = np.append(y, label * np.ones(X_t.shape[0], dtype=int))
+            y = np.vstack(y, label * np.ones(X_t.shape[0], dtype=int))
     folder, f = os.path.split(fname)
 
     try:
@@ -206,7 +210,11 @@ def make_df(parseout, block, subject, align_pos, tier='word'):
     keys = sorted(parseout.keys())
     datamat = [parseout[key] for key in keys]
     df = pd.DataFrame(np.vstack(datamat).T, columns=keys)
-    first_phones_per_word = df[df['tier'] == tier]['contains'].apply(lambda x: x[align_pos])
+    keep = (((df['tier'] == tier) &
+             (df['contains'].apply(lambda x: len(x) if isinstance(x, list) else 0) > align_pos)) |
+            (df['tier'] != tier))
+    df = df[keep]
+    first_phones_per_word = df['contains'][df['tier'] == tier].apply(lambda x: x[align_pos])
     df_events = df[df['tier'] == tier]
 
     # Get rid of superfluous columns
@@ -319,16 +327,17 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
 
     for ievent, time in enumerate(event_times):
         event_data = data[:, isin(tt_data, align_window + time)].T
-        D[ievent] = event_data
+        t_len = min(event_data.shape[0], D.shape[1])
+        D[ievent, :t_len] = event_data[:t_len]
 
     if bad_times.any():
-        good_trials = [not np.any(np.logical_and(bad_times,
-            np.any(is_overlap(align_window + time, bad_times))))
-            for time in event_times]
+        good_trials = [ii for ii, time in enumerate(event_times)
+                       if not np.any(np.logical_and(bad_times,
+                           np.any(is_overlap(align_window + time, bad_times))))]
         D = D[good_trials]
 
     if len(bad_electrodes):
-        bad_electrodes = bad_electrodes[bad_electrodes < D.shape[3]]
+        bad_electrodes = bad_electrodes[bad_electrodes < D.shape[2]]
         D[:, :, bad_electrodes] = np.nan
 
     return D
@@ -348,7 +357,7 @@ def load_HG(blockpath):
         High gamma data.
     fs_hg : float
         Sampling frequency of data.
-    """"
+    """
 
     htk_path = os.path.join(blockpath, 'HilbAA_70to150_8band')
     HTKout = HTK.readHTKs(htk_path)
@@ -402,12 +411,17 @@ def load_bad_electrodes(blockpath):
 
     bad_electrodes = []
     with open(os.path.join(blockpath, 'Artifacts', 'badChannels.txt'),'rt') as f:
-        bes = csv.reader(f, delimiter=' ')
-        for be in bes:
-            if be != '':
-                bad_electrodes.append(be)
+        lines = f.readlines()
+        for bes in lines:
+            for be in bes:
+                if be != '':
+                    try:
+                        be = int(be)
+                        bad_electrodes.append(be)
+                    except ValueError:
+                        pass
 
-    bad_electrodes = np.array([int(be)-1 for be in bad_electrodes])
+    bad_electrodes = np.array([be-1 for be in bad_electrodes])
 
     return bad_electrodes
 
@@ -438,9 +452,9 @@ def load_bad_times(blockpath):
     except IOError:
         return np.array([])
 
-    bad_time = np.array(bad_times)
+    bad_times = np.array(bad_times)
 
-    return bad_electrodes
+    return bad_times
 
 def nans(shape, dtype=float):
     """
