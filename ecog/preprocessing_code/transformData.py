@@ -57,7 +57,7 @@ def main():
 def transform(path,subject,block,rate=400.,vsmc=True,\
               ct=87.75,sd=3.65):
 
-    b_path = '%s/%s/%s'%(path,subject,block)
+    b_path = '%s/%s/%S_B%s'%(path,subject,subject,block)
 
     """
     Load raw HTK files
@@ -110,7 +110,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     """
 
     if save:
-        with h5py.File('%s/pcsd_data/%s_%s_AS_%.1f_%.1f.h5'%(path,subject,block,ct,sd)) as f:
+        with h5py.File('%s/pcsd_data/%s_B%s_AS_%.1f_%.1f.h5'%(path,subject,block,ct,sd)) as f:
             f.attrs['sampling_rate'] = rate
             f.attrs['hilb_ct'] = ct
             f.attrs['hilb_sd'] = sd
