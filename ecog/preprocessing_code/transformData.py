@@ -6,6 +6,9 @@ from pyfftw.interfaces.numpy_fft import fft,ifft,fftfreq
 from scipy.io import loadmat
 
 import downSampleEcog as dse
+import subtractCAR as scar
+import applyLineNoiseNotch as notch
+
 
 subject = 'GP31'
 
@@ -13,7 +16,7 @@ block = 'GP31_B1'
 
 path = '/global/project/projectdirs/m2043/BRAINdata/Humans/tmp'
 
-def main(path,subject,block,vsmc_only=True):
+def main(path,subject,block,rate=400.,vsmc_only=True):
 
     b_path = '%s/%s/%s'%(path,subject,block)
 
@@ -40,7 +43,7 @@ def main(path,subject,block,vsmc_only=True):
     """
     Downsample to 400 Hz
     """
-    X = dse.downsampleEcog(X,400.,HTKoutR['sampling_rate']/1e4)
+    X = dse.downsampleEcog(X,rate,HTKoutR['sampling_rate']/1e4)
 
     """
     Discard bad segments
@@ -48,6 +51,20 @@ def main(path,subject,block,vsmc_only=True):
     #TODO
     badSgm = loadmat('%s/Artifacts/badTimeSegments.mat'%b_path)['badTimeSegments']
 
+    """
+    Subtract CAR
+    """
+    X = scar.subtractCAR(X)
+
+    """
+    Apply Notch filters
+    """
+    X = notch.applyLineNoiseNotch(X,rate)
+
+    """
+    Apply Hilbert transform
+    """
+    X = aht.applyHilbertTransform(X,rate,center=87.,sd=)
 
 
 
