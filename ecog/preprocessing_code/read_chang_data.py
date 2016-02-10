@@ -95,10 +95,10 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     results = pool.map(process_block, args)
     for Bstart, Bstop, BD in results:
         for token in tokens:
-            start_times[token] = (np.vstack((start_times[token], Bstart)) if
-                                  start_times[token].size else Bstart)
-            stop_times[token] = (np.vstack((stop_times[token], Bstop)) if
-                                 stop_times[token].size else Bstop)
+            start_times[token] = (np.vstack((start_times[token], Bstart[token])) if
+                                  start_times[token].size else Bstart[token])
+            stop_times[token] = (np.vstack((stop_times[token], Bstop[token])) if
+                                 stop_times[token].size else Bstop[token])
             D[token] = (np.vstack((D[token], BD[token])) if
                         D[token].size else BD[token])
 
