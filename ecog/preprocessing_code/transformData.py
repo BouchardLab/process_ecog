@@ -35,6 +35,9 @@ def main():
     parser.add_option("--vsmc",action='store_true',\
         dest='vsmc',help="Include vSMC electrodes only (optional)")
 
+    parser.add_option("--store",action='store_true',\
+        dest='store',help="Store results (optional)")
+
     parser.add_option("--ct",type="float",default=87.75,\
         help="Center frequency of the Gaussian filter (optional)")
 
@@ -51,11 +54,17 @@ def main():
     else:
         vsmc=False
 
+    if options.store:
+        store=True
+    else:
+        store=False
+
     transform(path=options.path,subject=options.subject,block=options.block,\
-              rate=options.rate,vsmc=vsmc,ct=options.ct,sd=options.sd)
+              rate=options.rate,vsmc=vsmc,ct=options.ct,sd=options.sd,\
+              store=store)
 
 def transform(path,subject,block,rate=400.,vsmc=True,\
-              ct=87.75,sd=3.65):
+              ct=87.75,sd=3.65,store=False):
 
     b_path = '%s/%s/%s_%s'%(path,subject,subject,block)
 
@@ -109,7 +118,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     Store the results
     """
 
-    if save:
+    if store:
         with h5py.File('%s/pcsd_data/%s_%s_AS_%.1f_%.1f.h5'%(path,subject,block,ct,sd)) as f:
             f.attrs['sampling_rate'] = rate
             f.attrs['hilb_ct'] = ct
