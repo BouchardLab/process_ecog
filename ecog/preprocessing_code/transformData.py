@@ -4,19 +4,58 @@ import h5py
 import HTK
 from pyfftw.interfaces.numpy_fft import fft,ifft,fftfreq
 from scipy.io import loadmat
+from optparse import OptionParser
+
 
 import downSampleEcog as dse
 import subtractCAR as scar
 import applyLineNoiseNotch as notch
+import applyHilbertTransform as aht
+
+__authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 
 
-subject = 'GP31'
+def main():
+    usage = '%prog [options]'
 
-block = 'GP31_B1'
+    parser = OptionParser(usage)
 
-path = '/global/project/projectdirs/m2043/BRAINdata/Humans/tmp'
+    parser.add_option("--subject",type="string",default='GP31',\
+        help="Code of the subject")
 
-def main(path,subject,block,rate=400.,vsmc_only=True):
+    parser.add_option("--block",type="int",default=1,\
+        help="Block number")
+
+    parser.add_option("--path",type="string",default='',\
+        help="Path to the data")
+
+    parser.add_option("--rate",type="float",default=400.,\
+        help="Sampling rate of the processed signal (optional)")
+
+    parser.add_option("--vsmc",action='store_true',\
+        dest='verbose',help="Include vSMC electrodes only (optional)")
+
+    parser.add_option("--ct",type="float",default=87.75,\
+        help="Center frequency of the Gaussian filter (optional)")
+
+    parser.add_option("--sd",type="float",default=3.65,\
+        help="Standard deviation of the Gaussian filter (optional)")
+
+    (options, args) = parser.parse_args()
+
+    if options.path=='':
+        raise IOError('Inroduce a correct data path!')
+
+    if options.vsmc:
+        vsmc=True
+    else:
+        vsmc=False
+
+    transform(path=options.path,subject=options.subject,block=options.block,\
+              rate=options.rate,vsmc=vsmc,ct=options.ct,sd=options.sd)
+
+def transform(path,subject,block,rate=400.,vsmc=True,\
+              ct=87.75,sd=3.65):
 
     b_path = '%s/%s/%s'%(path,subject,block)
 
@@ -30,7 +69,7 @@ def main(path,subject,block,rate=400.,vsmc_only=True):
     Select electrodes
     """
     electrodes = loadmat('%s/Anatomy/%s_anatomy.mat'%(path,subject))
-    if vsmc_only:
+    if vsmc:
         elects = np.hstack([electrodes['anatomy']['preCG'][0][0][0],\
                             electrodes['anatomy']['postCG'][0][0][0]])-1
     else:
@@ -64,9 +103,22 @@ def main(path,subject,block,rate=400.,vsmc_only=True):
     """
     Apply Hilbert transform
     """
-    X = aht.applyHilbertTransform(X,rate,center=87.,sd=)
+    Xas = aht.applyHilbertTransform(X,rate,ct,sd)
 
+    """
+    Store the results
+    """
 
+    if save:
+        with h5py.File('%s/pcsd_data/%s_%s_AS_%.1f_%.1f.h5'%(path,subject,block,ct,sd)) as f:
+            f.attrs['sampling_rate'] = rate
+            f.attrs['hilb_ct'] = ct
+            f.attrs['hilb_sd'] = sd
+            f.create_dataset(name='X',data=X,compression='gzip')
+            f.create_dataset(name='X_imag',data=Xas.imag,compression='gzip')
+            f.create_dataset(name='X_real',data=Xas.real,compression='gzip')
+    else:
+        return X,Xas
 
 
 if __name__=='__main__':
