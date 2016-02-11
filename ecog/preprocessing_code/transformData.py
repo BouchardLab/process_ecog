@@ -2,16 +2,22 @@ from __future__ import division
 import numpy as np
 import h5py
 import HTK_hilb as htk
+reload(htk)
 from pyfftw.interfaces.numpy_fft import fft,ifft,fftfreq
 from scipy.io import loadmat
 from optparse import OptionParser
 
 
 import downSampleEcog as dse
+reload(dse)
 import subtractCAR as scar
+reload(scar)
 import applyLineNoiseNotch as notch
+reload(notch)
 import applyHilbertTransform as aht
+reload(aht)
 import deleteBadTimeSegments as dbts
+reload(dbts)
 
 __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 
