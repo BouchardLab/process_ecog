@@ -6,10 +6,11 @@ import scipy as sp
 import scipy.stats as stats
 from scipy.io import loadmat
 
-import transcripts
+import HTK, transcripts, utils
 
 
-def run_makeD(blockpath, event_times, align_window, data_type, zscore='events'):
+def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
+              all_event_times=None):
     """
     Extract requested data type.
 
@@ -38,8 +39,8 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events'):
             hg = stats.zscore(hg, axis=1)
         elif zscore == 'data':
             tt_data = np.arange(hg.shape[1]) / fs_hg
-            data_start = event_times.min() + align_window[0]
-            data_stop = event_times.max() + align_window[1]
+            data_start = all_event_times.min() + align_window[0]
+            data_stop = all_event_times.max() + align_window[1]
             data_time = utils.isin(tt_data, np.array([data_start, data_stop]))
             for bt in bad_times:
                 data_time = data_time & ~utils.isin(tt_data, bt)
@@ -49,10 +50,10 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events'):
             hg = (hg - means)/stds
         elif zscore == 'events':
             tt_data = np.arange(hg.shape[1]) / fs_hg
-            data_start = event_times.min() + align_window[0]
-            data_stop = event_times.max() + align_window[1]
+            data_start = all_event_times.min() + align_window[0]
+            data_stop = all_event_times.max() + align_window[1]
             data_time = np.zeros_like(tt_data).astype(bool)
-            for et in event_times:
+            for et in all_event_times:
                 data_time = data_time | utils.isin(tt_data, et + align_window)
             for bt in bad_times:
                 data_time = data_time & ~utils.isin(tt_data, bt)
@@ -60,6 +61,10 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events'):
             means = data.mean(axis=1, keepdims=True)
             stds = data.std(axis=1, keepdims=True)
             hg = (hg - means) / stds
+        elif ((zscore is None) or (zscore.lower() == 'none')):
+            pass
+        else:
+            raise ValueError('zscore type {} not recognized.'.format(zscore))
 
 
         D = makeD(hg, fs_hg, event_times, align_window,

@@ -2,6 +2,7 @@ __author__ = 'David Conant, Jesse Livezey'
 
 import re, os
 import numpy as np
+import pandas as pd
 
 
 lab_time_conversion = 1.e7

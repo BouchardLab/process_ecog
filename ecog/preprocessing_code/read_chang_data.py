@@ -1,16 +1,14 @@
 #!/usr/bin/env python
 __author__ = 'David Conant, Jesse Livezey'
 
-import sys
-import argparse, h5py, multiprocessing, re, os, glob, csv
+import argparse, h5py, multiprocessing, os
 import numpy as np
-import scipy as sp
-import scipy.stats as stats
-from scipy.io import loadmat
-import pandas as pd
 
-import utils
-from utils import HTK, transcripts, make_data
+from utils import transcripts, make_data
+
+
+# multiprocessing or python map()
+mp = True
 
 
 def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
@@ -91,10 +89,13 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     stop_times = dict((token, np.array([])) for token in tokens)
     start_times = dict((token, np.array([])) for token in tokens)
 
-    pool = multiprocessing.Pool()
-    args = [(subject, block, path, tokens, align_pos, align_window, data_type)
+    args = [(subject, block, path, tokens, align_pos, align_window, data_type, zscore)
             for block in blocks]
-    results = pool.map(process_block, args)
+    if mp:
+        pool = multiprocessing.Pool()
+        results = pool.map(process_block, args)
+    else:
+        results = map(process_block, args)
     for Bstart, Bstop, BD in results:
         for token in tokens:
             start_times[token] = (np.hstack((start_times[token], Bstart[token])) if
@@ -122,7 +123,7 @@ def process_block(args):
     tokens : list of str
     """
     
-    subject, block, path, tokens, align_pos, align_window, data_type = args
+    subject, block, path, tokens, align_pos, align_window, data_type, zscore = args
 
     blockname = subject + '_B' + str(block)
     print('Processing block ' + blockname)
@@ -135,15 +136,23 @@ def process_block(args):
     stop_times = dict()
     start_times = dict()
 
-    for ind, token in enumerate(tokens):
-        match = [token in t for t in df['label']]
+    all_event_times = np.array([])
+    for token in tokens:
+        match = (df['label'] == token)
+        all_event_times = (np.hstack((all_event_times,
+                                      df['align'][match & (df['mode'] == 'speak')]))
+                           if all_event_times.size else df['align'][match & (df['mode'] == 'speak')])
+
+    for token in tokens:
+        match = (df['label'] == token)
         event_times = df['align'][match & (df['mode'] == 'speak')]
         start = event_times.values + align_window[0]
         stop = event_times.values + align_window[1]
 
         start_times[token] = start.astype(float)
         stop_times[token] = stop.astype(float)
-        D[token] = make_data.run_makeD(blockpath, event_times, align_window, data_type=data_type)
+        D[token] = make_data.run_makeD(blockpath, event_times, align_window,
+                                       data_type, zscore, all_event_times)
 
     return (start_times, stop_times, D)
 

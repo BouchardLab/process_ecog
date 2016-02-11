@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH -p debug
 #SBATCH -N 3
-#SBATCH -t 02:00:00
+#SBATCH -t 00:30:00
 #SBATCH -J process_data
 #SBATCH -o process_output.o%j
 
