@@ -46,8 +46,7 @@ def main():
 
     (options, args) = parser.parse_args()
 
-    if options.path=='':
-        raise IOError('Inroduce a correct data path!')
+    assert options.path!='',IOError('Inroduce a correct data path!')
 
     if options.vsmc:
         vsmc=True

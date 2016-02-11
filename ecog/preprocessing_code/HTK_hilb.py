@@ -21,7 +21,7 @@ import numpy as np
 # conversion from what the file specifies as the sampling rate into the actual
 # sampling rate (in Hz), assuming that the scaling factor was applied during
 # the HTK file construction.
-SAMPLING_RATE_FACTOR = 1e4
+SAMPLING_RATE_FACTOR = 1
 
 def readHTK(file_path, data_type = 'HTK', big_endian = True,
             scale_s_rate = False):
@@ -153,16 +153,19 @@ def readHTKs(dir_path,electrodes = None):
 
     htkout = readHTK(dir_path + '/Wav11.htk')
     num_samples = htkout['data'].shape[1]
+    num_fbands  = htkout['data'].shape[0]
 
-    alldata = np.zeros((len(electrodes),num_samples))  # malloc
+
+    alldata = np.zeros((num_fbands,len(electrodes),num_samples))  # malloc
 
     for ifile in electrodes:
         htkout = readHTK(dir_path + '/Wav%i%i.htk'%(np.ceil((ifile+1)/64.),np.mod(ifile,64)+1))
-        alldata[ifile,:] = np.mean(htkout['data'],0)
+        alldata[:,ifile,:] = htkout['data']
+
 
     return {'num_samples':    htkout['num_samples'],
         'sampling_rate':  float(htkout['sampling_rate']),
         'sample_size':    htkout['sample_size'],
         'parameter_kind': htkout['parameter_kind'],
-        'data':           alldata}
+        'data':           np.squeeze(alldata)}
 

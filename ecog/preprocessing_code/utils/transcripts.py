@@ -2,6 +2,7 @@ __author__ = 'David Conant, Jesse Livezey'
 
 import re, os
 import numpy as np
+import pandas as pd
 
 
 lab_time_conversion = 1.e7
@@ -275,3 +276,48 @@ def format_events(label, start, stop, tier):
               'contained_by': contained_by, 'position': position}
 
     return events
+
+def make_df(parseout, block, subject, align_pos, tier='word'):
+    """
+    Organize event data.
+
+    Parameters
+    ----------
+    parseout : dict
+        Dictionary from parsed transcript.
+    block : int
+        Block ID.
+    subject : str
+        Subject ID.
+    align_pos : int
+        Subelement in event to align to.
+    tier : str
+        Type of event to extract.
+    """
+
+    keys = sorted(parseout.keys())
+    datamat = [parseout[key] for key in keys]
+    df = pd.DataFrame(np.vstack(datamat).T, columns=keys)
+    keep = (((df['tier'] == tier) &
+              (df['contains'].apply(lambda x: len(x) if isinstance(x, list) else 0) > align_pos)) |
+             (df['tier'] != tier))
+    df = df[keep]
+    first_phones_per_word = df['contains'][df['tier'] == tier].apply(lambda x: x[align_pos])
+    df_events = df[df['tier'] == tier]
+
+    # Get rid of superfluous columns
+    df_events = df_events[['label','start', 'stop']]
+    df_events['align'] = df['start'].iloc[first_phones_per_word].astype(float).values
+    assert np.all(df_events['align'] >= df_events['start'])
+    assert np.all(df_events['align'] <= df_events['stop'])
+
+    # Pull mode from label and get rid of number
+    df_events['mode'] = ['speak' if l[-1] == '2' else 'listen' for l in df_events['label']]
+    df_events['label'] = df_events['label'].apply(lambda x: x[:-1])
+
+    df_events['label'] = df_events['label'].astype('category')
+    df_events['mode'] = df_events['mode'].astype('category')
+    df_events['block'] = block
+    df_events['subject'] = subject
+
+    return df_events
