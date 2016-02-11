@@ -51,7 +51,7 @@ def main():
     parser.add_option("--sd",type="float",default=3.65,\
         help="Standard deviation of the Gaussian filter (optional)")
 
-    parser.add_option("--srf",type="float",default=1.,\
+    parser.add_option("--srf",type="float",default=1e4,\
         help="Sampling rate factor. Read notes in HTK.py (optional)")
 
     (options, args) = parser.parse_args()
@@ -73,7 +73,7 @@ def main():
               store=store,srf=options.srf)
 
 def transform(path,subject,block,rate=400.,vsmc=True,\
-              ct=87.75,sd=3.65,store=False,srf=1):
+              ct=87.75,sd=3.65,store=False,srf=1e4):
 
     b_path = '%s/%s/%s_%s'%(path,subject,subject,block)
 
