@@ -21,7 +21,7 @@ import numpy as np
 # conversion from what the file specifies as the sampling rate into the actual
 # sampling rate (in Hz), assuming that the scaling factor was applied during
 # the HTK file construction.
-SAMPLING_RATE_FACTOR = 1
+SAMPLING_RATE_FACTOR = 1.
 
 def readHTK(file_path, data_type = 'HTK', big_endian = True,
             scale_s_rate = False):

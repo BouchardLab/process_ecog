@@ -84,6 +84,16 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     HTKoutR = htk.readHTKs(rd_path)
 
     """
+    Downsample to 400 Hz
+    """
+    X = dse.downsampleEcog(X,rate,HTKoutR['sampling_rate']/srf)
+
+    """
+    Subtract CAR
+    """
+    X = scar.subtractCAR(X)
+
+    """
     Select electrodes
     """
     electrodes = loadmat('%s/%s/Anatomy/%s_anatomy.mat'%(path,subject,subject))
@@ -98,21 +108,11 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     X = HTKoutR['data'][elects]
 
     """
-    Downsample to 400 Hz
-    """
-    X = dse.downsampleEcog(X,rate,HTKoutR['sampling_rate']/srf)
-
-    """
     Discard bad segments
     """
     #TODO
 #    badSgm = loadmat('%s/Artifacts/badTimeSegments.mat'%b_path)['badTimeSegments']
 #    dbts.deleteBadTimeSegments(X,rate,badSgm)
-
-    """
-    Subtract CAR
-    """
-    X = scar.subtractCAR(X)
 
     """
     Apply Notch filters
