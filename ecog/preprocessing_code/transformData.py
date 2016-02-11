@@ -82,6 +82,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     """
     rd_path = '%s/RawHTK'%b_path
     HTKoutR = htk.readHTKs(rd_path)
+    X = HTKoutR['data']
 
     """
     Downsample to 400 Hz
@@ -105,7 +106,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     badElects = np.loadtxt('/%s/Artifacts/badChannels.txt'%b_path)-1
     elects = np.setdiff1d(elects,badElects)
 
-    X = HTKoutR['data'][elects]
+    X = X[elects]
 
     """
     Discard bad segments
