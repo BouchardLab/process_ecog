@@ -1,7 +1,7 @@
 from __future__ import division
 import numpy as np
 import h5py
-import HTK
+import HTK_hilb as htk
 from pyfftw.interfaces.numpy_fft import fft,ifft,fftfreq
 from scipy.io import loadmat
 from optparse import OptionParser
@@ -45,6 +45,9 @@ def main():
     parser.add_option("--sd",type="float",default=3.65,\
         help="Standard deviation of the Gaussian filter (optional)")
 
+    parser.add_option("--srf",type="float",default=1.,\
+        help="Sampling rate factor. Read notes in HTK.py (optional)")
+
     (options, args) = parser.parse_args()
 
     assert options.path!='',IOError('Inroduce a correct data path!')
@@ -61,10 +64,10 @@ def main():
 
     transform(path=options.path,subject=options.subject,block=options.block,\
               rate=options.rate,vsmc=vsmc,ct=options.ct,sd=options.sd,\
-              store=store)
+              store=store,srf=options.srf)
 
 def transform(path,subject,block,rate=400.,vsmc=True,\
-              ct=87.75,sd=3.65,store=False):
+              ct=87.75,sd=3.65,store=False,srf=1):
 
     b_path = '%s/%s/%s_%s'%(path,subject,subject,block)
 
@@ -72,7 +75,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     Load raw HTK files
     """
     rd_path = '%s/RawHTK'%b_path
-    HTKoutR = HTK.readHTKs(rd_path)
+    HTKoutR = htk.readHTKs(rd_path)
 
     """
     Select electrodes
@@ -91,7 +94,7 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     """
     Downsample to 400 Hz
     """
-    X = dse.downsampleEcog(X,rate,HTKoutR['sampling_rate']/1e4)
+    X = dse.downsampleEcog(X,rate,HTKoutR['sampling_rate']/srf)
 
     """
     Discard bad segments
