@@ -152,7 +152,6 @@ def readHTKs(dir_path,electrodes = None):
         electrodes = range(256)
 
     htkout = readHTK(dir_path + '/Wav11.htk')
-    print htkout['data'].shape
     num_samples = htkout['data'].shape[1]
 
     alldata = np.zeros((len(electrodes),num_samples))  # malloc
@@ -160,7 +159,6 @@ def readHTKs(dir_path,electrodes = None):
     for ifile in electrodes:
         htkout = readHTK(dir_path + '/Wav%i%i.htk'%(np.ceil((ifile+1)/64.),np.mod(ifile,64)+1))
         alldata[ifile,:] = np.mean(htkout['data'],0)
-#        alldata[ifile,:] = np.mean(htkout['data'],0)
 
 
     return {'num_samples':    htkout['num_samples'],

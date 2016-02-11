@@ -11,6 +11,7 @@ import downSampleEcog as dse
 import subtractCAR as scar
 import applyLineNoiseNotch as notch
 import applyHilbertTransform as aht
+import deleteBadTimeSegments as dbts
 
 __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 
@@ -96,7 +97,8 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     Discard bad segments
     """
     #TODO
-    badSgm = loadmat('%s/Artifacts/badTimeSegments.mat'%b_path)['badTimeSegments']
+#    badSgm = loadmat('%s/Artifacts/badTimeSegments.mat'%b_path)['badTimeSegments']
+#    dbts.deleteBadTimeSegments(X,rate,badSgm)
 
     """
     Subtract CAR
