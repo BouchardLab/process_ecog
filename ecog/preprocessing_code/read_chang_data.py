@@ -184,7 +184,7 @@ def save_hdf5(fname, D, tokens):
         if y is None:
             y = label * np.ones(X_t.shape[0], dtype=int)
         else:
-            y = np.hstack((y, label * np.ones(X_t.shape[0], dtype=int)))
+            y = np.vstack((y, label * np.ones(X_t.shape[0], dtype=int)))
     folder, f = os.path.split(fname)
 
     try:

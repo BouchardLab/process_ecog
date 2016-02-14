@@ -1,16 +1,23 @@
 from __future__ import division
 import numpy as np
 import h5py
-import HTK
+import HTK_hilb as htk
+reload(htk)
 from pyfftw.interfaces.numpy_fft import fft,ifft,fftfreq
 from scipy.io import loadmat
 from optparse import OptionParser
 
 
 import downSampleEcog as dse
+reload(dse)
 import subtractCAR as scar
+reload(scar)
 import applyLineNoiseNotch as notch
+reload(notch)
 import applyHilbertTransform as aht
+reload(aht)
+import deleteBadTimeSegments as dbts
+reload(dbts)
 
 __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 
@@ -44,10 +51,12 @@ def main():
     parser.add_option("--sd",type="float",default=3.65,\
         help="Standard deviation of the Gaussian filter (optional)")
 
+    parser.add_option("--srf",type="float",default=1e4,\
+        help="Sampling rate factor. Read notes in HTK.py (optional)")
+
     (options, args) = parser.parse_args()
 
-    if options.path=='':
-        raise IOError('Inroduce a correct data path!')
+    assert options.path!='',IOError('Inroduce a correct data path!')
 
     if options.vsmc:
         vsmc=True
@@ -61,10 +70,10 @@ def main():
 
     transform(path=options.path,subject=options.subject,block=options.block,\
               rate=options.rate,vsmc=vsmc,ct=options.ct,sd=options.sd,\
-              store=store)
+              store=store,srf=options.srf)
 
 def transform(path,subject,block,rate=400.,vsmc=True,\
-              ct=87.75,sd=3.65,store=False):
+              ct=87.75,sd=3.65,store=False,srf=1e4):
 
     b_path = '%s/%s/%s_%s'%(path,subject,subject,block)
 
@@ -72,7 +81,18 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     Load raw HTK files
     """
     rd_path = '%s/RawHTK'%b_path
-    HTKoutR = HTK.readHTKs(rd_path)
+    HTKoutR = htk.readHTKs(rd_path)
+    X = HTKoutR['data']
+
+    """
+    Downsample to 400 Hz
+    """
+    X = dse.downsampleEcog(X,rate,HTKoutR['sampling_rate']/srf)
+
+    """
+    Subtract CAR
+    """
+    X = scar.subtractCAR(X)
 
     """
     Select electrodes
@@ -86,23 +106,14 @@ def transform(path,subject,block,rate=400.,vsmc=True,\
     badElects = np.loadtxt('/%s/Artifacts/badChannels.txt'%b_path)-1
     elects = np.setdiff1d(elects,badElects)
 
-    X = HTKoutR['data'][elects]
-
-    """
-    Downsample to 400 Hz
-    """
-    X = dse.downsampleEcog(X,rate,HTKoutR['sampling_rate']/1e4)
+    X = X[elects]
 
     """
     Discard bad segments
     """
     #TODO
-    badSgm = loadmat('%s/Artifacts/badTimeSegments.mat'%b_path)['badTimeSegments']
-
-    """
-    Subtract CAR
-    """
-    X = scar.subtractCAR(X)
+#    badSgm = loadmat('%s/Artifacts/badTimeSegments.mat'%b_path)['badTimeSegments']
+#    dbts.deleteBadTimeSegments(X,rate,badSgm)
 
     """
     Apply Notch filters
