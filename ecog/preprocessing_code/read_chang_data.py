@@ -151,8 +151,10 @@ def process_block(args):
 
         start_times[token] = start.astype(float)
         stop_times[token] = stop.astype(float)
-        D[token] = make_data.run_makeD(blockpath, event_times, align_window,
-                                       data_type, zscore, all_event_times)
+        data = make_data.run_makeD(blockpath, event_times, align_window,
+                                   data_type, zscore, all_event_times)
+        resampled_data = make_data.resample_data(data)
+        D[token] = resampled_data
 
     return (start_times, stop_times, D)
 

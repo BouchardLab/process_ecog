@@ -131,7 +131,7 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
     for ievent, time in enumerate(event_times):
         event_data = data[:, time_idx(time) + window_start:time_idx(time) + window_start + window_length].T
         assert event_data.shape[0] == D.shape[1]
-        D[ievent, :t_len] = event_data[:t_len]
+        D[ievent] = event_data
 
     if bad_times.any():
         good_trials = [ii for ii, time in enumerate(event_times)
