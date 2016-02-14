@@ -3,8 +3,11 @@ __author__ = 'David Conant, Jesse Livezey'
 import os, glob, csv
 import numpy as np
 import scipy as sp
+
 import scipy.stats as stats
 from scipy.io import loadmat
+
+from scikits.samplerate import resample
 
 import HTK, transcripts, utils
 
@@ -117,12 +120,17 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
         assert align_window[1] >= 0.
         assert align_window[0] < align_window[1]
 
-    D = utils.nans((len(event_times), np.ceil(np.diff(align_window) * fs_data), data.shape[0]))
+    window_length = int(np.ceil(np.diff(align_window) * fs_data))
+    window_start = int(np.floor(align_window[0] * fs_data))
+    D = utils.nans((len(event_times), window_length, data.shape[0]))
     tt_data = np.arange(data.shape[1]) / fs_data
 
+    def time_idx(time):
+        return int(np.around(time) * fs_data)
+
     for ievent, time in enumerate(event_times):
-        event_data = data[:, utils.isin(tt_data, align_window + time)].T
-        t_len = min(event_data.shape[0], D.shape[1])
+        event_data = data[:, time_idx(time) + window_start:time_idx(time) + window_start + window_length].T
+        assert event_data.shape[0] == D.shape[1]
         D[ievent, :t_len] = event_data[:t_len]
 
     if bad_times.any():
@@ -250,3 +258,32 @@ def load_bad_times(blockpath):
     bad_times = np.array(bad_times)
 
     return bad_times
+
+def resample_data(X, ratio=.502):
+    """
+    Resample datapoints and channels.
+
+    Parameteres
+    -----------
+    X : ndarray (n_batch, n_time, n_channels)
+        Data array to resamples.
+    ratio : float
+        Ratio for data resampling. Defaults does 516 -> 258.
+
+    Returns
+    -------
+    resampled_X : ndarray
+        Resampled data array.
+    """
+    n_batch, n_time, n_channels = X.shape
+    n_time, = resample(np.zeros(n_time), ratio, 'sinc_best').shape
+    resampled_X = utils.nans((n_batch, n_time, n_channels))
+    
+    for ii in range(n_batch):
+        for jj in range(n_channels):
+            if np.isnan(X[ii, :, jj]).sum() == 0:
+                resampled_X[ii, :, jj] = resample(X[ii, :, jj], ratio, 'sinc_best')
+            else:
+                pass
+
+    return resampled_X

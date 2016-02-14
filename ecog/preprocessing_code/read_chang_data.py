@@ -108,7 +108,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     print('Saving to: '+fname)
     save_hdf5(fname, D, tokens)
 
-    anat = load_anatomy(path)
+    anat = make_data.load_anatomy(path)
     return (D, anat, start_times, stop_times)
 
 def process_block(args):
