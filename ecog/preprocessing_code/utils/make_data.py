@@ -53,8 +53,6 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
             hg = (hg - means)/stds
         elif zscore == 'events':
             tt_data = np.arange(hg.shape[1]) / fs_hg
-            data_start = all_event_times.min() + align_window[0]
-            data_stop = all_event_times.max() + align_window[1]
             data_time = np.zeros_like(tt_data).astype(bool)
             for et in all_event_times:
                 data_time = data_time | utils.isin(tt_data, et + align_window)
@@ -126,7 +124,7 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
     tt_data = np.arange(data.shape[1]) / fs_data
 
     def time_idx(time):
-        return int(np.around(time) * fs_data)
+        return int(np.around(time * fs_data))
 
     for ievent, time in enumerate(event_times):
         event_data = data[:, time_idx(time) + window_start:time_idx(time) + window_start + window_length].T
