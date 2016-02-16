@@ -1,6 +1,6 @@
 __author__ = 'David Conant, Jesse Livezey'
 
-import os, glob, csv
+import os, glob, csv, h5py
 import numpy as np
 import scipy as sp
 
@@ -180,20 +180,27 @@ def loadForm(blockpath):
     return F
 
 def load_anatomy(subj_dir):
-    anatomy_filename = glob.glob(os.path.join(subj_dir, '*_anat.mat'))
+
+    anatomy_filename = glob.glob(os.path.join(subj_dir, 'Anatomy', '*_anatomy.mat'))[0]
     elect_labels_filename = glob.glob(os.path.join(subj_dir, 'elec_labels.mat'))
 
+    electrode_labels = dict()
     if anatomy_filename:
-        anatomy = sp.io.loadmat(anatomy_filename[0])
-        electrode_labels = np.array([item[0][0] if len(item[0])
-                                     else '' for item in anatomy['electrodes'][0]])
-
+        try:
+            anatomy = sp.io.loadmat(anatomy_filename)['anatomy']
+            names = anatomy.dtype.names
+            for n, labels in zip(names, anatomy[0][0]):
+                electrode_labels[n] = np.array(labels[0])
+        except ValueError:
+            with h5py.File(anatomy_filename) as f:
+                for n in f['anatomy'].keys():
+                    electrode_labels[n] = f['anatomy'][n].value
     elif elect_labels_filename:
+        raise NotImplementedError
         a = sp.io.loadmat(os.path.join(subj_dir, 'elec_labels.mat'))
         electrode_labels = np.array([ elem[0] for elem in a['labels'][0]])
-
     else:
-        electrode_labels = ''
+        raise ValueError('Could not find anatomy file.')
 
     return electrode_labels
 

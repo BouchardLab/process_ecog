@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 __author__ = 'David Conant, Jesse Livezey'
 
-import argparse, h5py, multiprocessing, os
+import argparse, h5py, multiprocessing, sys, os
 import numpy as np
 
 from utils import transcripts, make_data
@@ -85,6 +85,8 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                                        + align_window_str(align_window) + '_'
                                        + zscore + '.h5'))
 
+    anat = make_data.load_anatomy(path)
+
     D = dict((token, np.array([])) for token in tokens)
     stop_times = dict((token, np.array([])) for token in tokens)
     start_times = dict((token, np.array([])) for token in tokens)
@@ -96,6 +98,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         results = pool.map(process_block, args)
     else:
         results = map(process_block, args)
+
     for Bstart, Bstop, BD in results:
         for token in tokens:
             start_times[token] = (np.hstack((start_times[token], Bstart[token])) if
@@ -106,9 +109,8 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                         D[token].size else BD[token])
 
     print('Saving to: '+fname)
-    save_hdf5(fname, D, tokens)
+    save_hdf5(fname, D, tokens, anat)
 
-    anat = make_data.load_anatomy(path)
     return (D, anat, start_times, stop_times)
 
 def process_block(args):
@@ -158,7 +160,7 @@ def process_block(args):
 
     return (start_times, stop_times, D)
 
-def save_hdf5(fname, D, tokens):
+def save_hdf5(fname, D, tokens, anat):
     """
     Save processed data to hdf5.
 
@@ -184,7 +186,7 @@ def save_hdf5(fname, D, tokens):
         if y is None:
             y = label * np.ones(X_t.shape[0], dtype=int)
         else:
-            y = np.vstack((y, label * np.ones(X_t.shape[0], dtype=int)))
+            y = np.hstack((y, label * np.ones(X_t.shape[0], dtype=int)))
     folder, f = os.path.split(fname)
 
     try:
@@ -196,6 +198,9 @@ def save_hdf5(fname, D, tokens):
         f.create_dataset('X', data=X.astype('float32'))
         f.create_dataset('y', data=y)
         f.create_dataset('tokens', data=tokens)
+        grp = f.create_group('anatomy')
+        for key in sorted(anat.keys()):
+            grp.create_dataset(key, data=anat[key])
 
 
 if __name__ == "__main__":
