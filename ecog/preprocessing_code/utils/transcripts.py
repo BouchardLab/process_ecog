@@ -194,13 +194,11 @@ def standardize_token(token):
         Standardized token.
     """
     token = token.lower()
-    #token = token.replace('uu', 'oo')
-    #token = token.replace('ue', 'oo')
-    #token = token.replace('gh', 'g')
-    # who?
-    # shaw?
-    # thaw?
-    # saw?
+    token = token.replace('uu', 'oo')
+    token = token.replace('ue', 'oo')
+    token = token.replace('gh', 'g')
+    token = token.replace('who', 'hoo')
+    token = token.replace('aw', 'aa')
 
     return token
 

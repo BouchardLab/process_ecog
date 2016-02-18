@@ -1,10 +1,13 @@
 __author__ = 'David Conant, Jesse Livezey'
 
-import os, glob, csv
+import os, glob, csv, h5py
 import numpy as np
 import scipy as sp
+
 import scipy.stats as stats
 from scipy.io import loadmat
+
+from scikits.samplerate import resample
 
 import HTK, transcripts, utils
 
@@ -50,8 +53,6 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
             hg = (hg - means)/stds
         elif zscore == 'events':
             tt_data = np.arange(hg.shape[1]) / fs_hg
-            data_start = all_event_times.min() + align_window[0]
-            data_stop = all_event_times.max() + align_window[1]
             data_time = np.zeros_like(tt_data).astype(bool)
             for et in all_event_times:
                 data_time = data_time | utils.isin(tt_data, et + align_window)
@@ -117,13 +118,18 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
         assert align_window[1] >= 0.
         assert align_window[0] < align_window[1]
 
-    D = utils.nans((len(event_times), np.ceil(np.diff(align_window) * fs_data), data.shape[0]))
+    window_length = int(np.ceil(np.diff(align_window) * fs_data))
+    window_start = int(np.floor(align_window[0] * fs_data))
+    D = utils.nans((len(event_times), window_length, data.shape[0]))
     tt_data = np.arange(data.shape[1]) / fs_data
 
+    def time_idx(time):
+        return int(np.around(time * fs_data))
+
     for ievent, time in enumerate(event_times):
-        event_data = data[:, utils.isin(tt_data, align_window + time)].T
-        t_len = min(event_data.shape[0], D.shape[1])
-        D[ievent, :t_len] = event_data[:t_len]
+        event_data = data[:, time_idx(time) + window_start:time_idx(time) + window_start + window_length].T
+        assert event_data.shape[0] == D.shape[1]
+        D[ievent] = event_data
 
     if bad_times.any():
         good_trials = [ii for ii, time in enumerate(event_times)
@@ -204,20 +210,27 @@ def loadForm(blockpath):
     return F
 
 def load_anatomy(subj_dir):
-    anatomy_filename = glob.glob(os.path.join(subj_dir, '*_anat.mat'))
+
+    anatomy_filename = glob.glob(os.path.join(subj_dir, 'Anatomy', '*_anatomy.mat'))[0]
     elect_labels_filename = glob.glob(os.path.join(subj_dir, 'elec_labels.mat'))
 
+    electrode_labels = dict()
     if anatomy_filename:
-        anatomy = sp.io.loadmat(anatomy_filename[0])
-        electrode_labels = np.array([item[0][0] if len(item[0])
-                                     else '' for item in anatomy['electrodes'][0]])
-
+        try:
+            anatomy = sp.io.loadmat(anatomy_filename)['anatomy']
+            names = anatomy.dtype.names
+            for n, labels in zip(names, anatomy[0][0]):
+                electrode_labels[n] = np.array(labels[0])
+        except ValueError:
+            with h5py.File(anatomy_filename) as f:
+                for n in f['anatomy'].keys():
+                    electrode_labels[n] = f['anatomy'][n].value
     elif elect_labels_filename:
+        raise NotImplementedError
         a = sp.io.loadmat(os.path.join(subj_dir, 'elec_labels.mat'))
         electrode_labels = np.array([ elem[0] for elem in a['labels'][0]])
-
     else:
-        electrode_labels = ''
+        raise ValueError('Could not find anatomy file.')
 
     return electrode_labels
 
@@ -282,3 +295,32 @@ def load_bad_times(blockpath):
     bad_times = np.array(bad_times)
 
     return bad_times
+
+def resample_data(X, ratio=.502):
+    """
+    Resample datapoints and channels.
+
+    Parameteres
+    -----------
+    X : ndarray (n_batch, n_time, n_channels)
+        Data array to resamples.
+    ratio : float
+        Ratio for data resampling. Defaults does 516 -> 258.
+
+    Returns
+    -------
+    resampled_X : ndarray
+        Resampled data array.
+    """
+    n_batch, n_time, n_channels = X.shape
+    n_time, = resample(np.zeros(n_time), ratio, 'sinc_best').shape
+    resampled_X = utils.nans((n_batch, n_time, n_channels))
+    
+    for ii in range(n_batch):
+        for jj in range(n_channels):
+            if np.isnan(X[ii, :, jj]).sum() == 0:
+                resampled_X[ii, :, jj] = resample(X[ii, :, jj], ratio, 'sinc_best')
+            else:
+                pass
+
+    return resampled_X
