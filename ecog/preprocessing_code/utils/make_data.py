@@ -10,7 +10,7 @@ from scipy.io import loadmat
 from scikits.samplerate import resample
 
 import HTK, transcripts, utils
-
+import .HTK_hilb
 
 def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
               all_event_times=None):
