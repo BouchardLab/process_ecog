@@ -137,6 +137,38 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
 
     return D
 
+def load_AS(blockpath,part='real',fbid=0):
+    """
+    Reads in HTK data.
+
+    Parameters
+    ----------
+    blockpath : str
+        Path to block.
+
+    Returns
+    -------
+    hg : ndarray (n_channels, n_time)
+        High gamma data.
+    fs_hg : float
+        Sampling frequency of data.
+    """
+
+    if part=='real':
+        htk_path = os.path.join(blockpath, 'HilbReal_4to200_40band')
+    elif part=='imag':
+        htk_path = os.path.join(blockpath, 'HilbImag_4to200_40band')
+
+    HTKout = HTK_hilb.readHTKs(htk_path)
+
+    s = HTKout['data'][fbid]
+
+    # Frequency in Hz
+    fs = HTKout['sampling_rate']/1e4
+
+    return (s, fs)
+
+
 def load_HG(blockpath):
     """
     Reads in HTK data.
