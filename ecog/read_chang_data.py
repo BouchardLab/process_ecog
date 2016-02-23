@@ -9,7 +9,8 @@ from .tokenize import transcripts, make_data
 
 def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                 align_window=None, align_pos = 0,
-                data_type='HG', zscore='events', mp=True):
+                data_type='HG', zscore='events',
+                fband=None, mp=True):
     """
     Process task data into segments with labels.
 
@@ -54,8 +55,11 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     else:
         raise ValueError("task must of one of ['CV']: "+str(task)+'.')
 
-    if data_type not in ['HG','AS']:
-        raise ValueError("data_type must be one of ['HG','AS']: "+str(data_type)+'.')
+    if data_type not in ['HG','AS_I','AS_R']:
+        raise ValueError("data_type must be one of ['HG','AS_I','AS_R']: "+str(data_type)+'.')
+
+    if fband==None and 'AS' in data_type:
+        raise ValueError("Specify the frequency band with data_type AS_I or AS_R")
 
     if align_window is None:
         align_window = np.array([-1., 1.])
@@ -76,10 +80,17 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         return rval
 
     folder, subject = os.path.split(os.path.normpath(path))
-    fname = os.path.join(output_folder, 'hdf5', (subject + '_' + block_str(blocks)
-                                       + task + '_' + data_type + '_'
-                                       + align_window_str(align_window) + '_'
-                                       + zscore + '.h5'))
+    if fband==None:
+        fname = os.path.join(output_folder, 'hdf5', (subject + '_' + block_str(blocks)
+                                           + task + '_' + data_type + '_'
+                                           + align_window_str(align_window) + '_'
+                                           + zscore + '.h5'))
+    else:
+        fname = os.path.join(output_folder, 'hdf5', (subject + '_' + block_str(blocks)
+                                           + task + '_' + data_type + '_'
+                                           + str(fband) + '_'
+                                           + align_window_str(align_window) + '_'
+                                           + zscore + '.h5'))
 
     anat = make_data.load_anatomy(path)
 
@@ -87,7 +98,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     stop_times = dict((token, np.array([])) for token in tokens)
     start_times = dict((token, np.array([])) for token in tokens)
 
-    args = [(subject, block, path, tokens, align_pos, align_window, data_type, zscore)
+    args = [(subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband)
             for block in blocks]
     if mp:
         pool = multiprocessing.Pool()
@@ -121,7 +132,7 @@ def process_block(args):
     tokens : list of str
     """
     
-    subject, block, path, tokens, align_pos, align_window, data_type, zscore = args
+    subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband = args
 
     blockname = subject + '_B' + str(block)
     print('Processing block ' + blockname)
@@ -150,9 +161,10 @@ def process_block(args):
         start_times[token] = start.astype(float)
         stop_times[token] = stop.astype(float)
         data = make_data.run_makeD(blockpath, event_times, align_window,
-                                   data_type, zscore, all_event_times)
-        resampled_data = make_data.resample_data(data)
-        D[token] = resampled_data
+                                   data_type, zscore, all_event_times, fband)
+#        resampled_data = make_data.resample_data(data)
+#        D[token] = resampled_data
+        D[token] = data
 
     return (start_times, stop_times, D)
 
@@ -210,7 +222,8 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--data_type', default='HG')
     parser.add_argument('-b', '--zscore', default='events')
     parser.add_argument('-m', '--mp', default=True)
+    parser.add_argument('-f', '--fband', type=int, default=18)
     args = parser.parse_args()
     htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
                 args.align_window, args.align_pos, args.data_type, args.zscore,
-                args.mp)
+                args.fband, args.mp)
