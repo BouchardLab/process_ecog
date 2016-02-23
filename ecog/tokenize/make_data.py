@@ -7,7 +7,8 @@ import scipy as sp
 import scipy.stats as stats
 from scipy.io import loadmat
 
-from scikits.samplerate import resample
+#from scikits.samplerate import resample
+import multiprocessing
 
 import ..utils
 import from ..utils import HTK, transcripts
@@ -76,20 +77,43 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
         return D
 
     def AS():
+        global rank
+        try:
+            process = multiprocessing.current_process()
+            rank = int(process.name.split('-')[-1])-1
+        except:
+            rank = 0
+
+
+        if rank==0:
+            print('\nLoading electrodes ...')
 
         bad_electrodes = load_bad_electrodes(blockpath) -1
         bad_times = load_bad_times(blockpath)
 
         part = data_type.split('_')[-1]
 
+        if rank==0:
+            print('\nLoading AS ...')
+
         s, fs = load_AS(blockpath,part,fband)
+
+        if rank==0:
+            print('\nLoading AS done!')
+            print('\nZ-scoring with mode: %s'%zscore)
 
         s = zscoreD(data=s,sampling_rate=fs,bad_times=bad_times,\
                     align_window=align_window,mode=zscore,\
                     all_event_times=all_event_times)
 
+        if rank==0:
+            print('\nMaking D ...')
+
         D = makeD(s, fs, event_times, align_window,
                   bad_times=bad_times, bad_electrodes=bad_electrodes)
+
+        if rank==0:
+            print('\nD done!')
 
         return D
 
@@ -185,7 +209,6 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
 
     for ievent, time in enumerate(event_times):
         event_data = data[:, time_idx(time) + window_start:time_idx(time) + window_start + window_length].T
-        pdb.set_trace()
         assert event_data.shape[0] == D.shape[1]
         D[ievent] = event_data
 
@@ -223,9 +246,17 @@ def load_AS(blockpath, part='R', fband=18):
     elif part=='I':
         htk_path = os.path.join(blockpath, 'HilbImag_4to200_40band')
 
+    if rank==0:
+        print('\nReading HTKs from %s'%htk_path)
+        print('\nFrequency band: %i'%fband)
+        print('\nLoading please wait ...')
+
     HTKout = HTK_hilb.read_HTKs(htk_path)
 
     s = HTKout['data'][fband]
+
+    if rank==0:
+        print('\nHTKs read!')
 
     # Frequency in Hz
     fs = HTKout['sampling_rate']/1e4

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 __author__ = 'David Conant, Jesse Livezey'
 
-import argparse, h5py, multiprocessing, sys, os
+import argparse, h5py, multiprocessing, sys, os, time
 import numpy as np
 
 from .tokenize import transcripts, make_data
@@ -97,21 +97,29 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     D = dict((token, np.array([])) for token in tokens)
     stop_times = dict((token, np.array([])) for token in tokens)
     start_times = dict((token, np.array([])) for token in tokens)
+    B = dict((token, np.array([])) for token in tokens)
+
+
 
     args = [(subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband)
             for block in blocks]
     print '\nNumbers of blocks to be processed: %i'%(len(blocks))
 
+<<<<<<< HEAD:ecog/read_chang_data.py
     if mp:
         global pool
         pool = multiprocessing.Pool()
+=======
+    if mp and len(blocks)>1:
+        pool = multiprocessing.Pool(len(blocks))
+>>>>>>> b45a309... changes to make_data.py:ecog/preprocessing_code/read_chang_data.py
         print '\nProcessing blocks in parallel with %i processes...'%(pool._processes)
         results = pool.map(process_block, args)
     else:
         print '\nProcessing blocks serially ...'
         results = map(process_block, args)
 
-    for Bstart, Bstop, BD in results:
+    for Bstart, Bstop, BD, Bn in results:
         for token in tokens:
             start_times[token] = (np.hstack((start_times[token], Bstart[token])) if
                                   start_times[token].size else Bstart[token])
@@ -119,11 +127,13 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                                  stop_times[token].size else Bstop[token])
             D[token] = (np.vstack((D[token], BD[token])) if
                         D[token].size else BD[token])
+            B[token] = (np.hstack((B[token], Bn[token])) if
+                                 B[token].size else Bn[token])
 
     print('\nSaving to: '+fname)
     save_hdf5(fname, D, tokens, anat)
 
-    return (D, anat, start_times, stop_times)
+    return (D, anat, start_times, stop_times,B)
 
 def process_block(args):
     """
@@ -136,6 +146,7 @@ def process_block(args):
     path : str
     tokens : list of str
     """
+<<<<<<< HEAD:ecog/read_chang_data.py
     if mp==True:
         rank = os.getpid()
     else:
@@ -143,12 +154,20 @@ def process_block(args):
 
 
 
+=======
+>>>>>>> b45a309... changes to make_data.py:ecog/preprocessing_code/read_chang_data.py
     subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband = args
+
+    try:
+        process = multiprocessing.current_process()
+        rank = int(process.name.split('-')[-1])-1
+    except:
+        rank = 0
 
     blockname = subject + '_B' + str(block)
     if rank==0:
-        print('\nProcessing block %s'%str(blockname))
-        print('-------------------')
+        print('\nProcessing subject %s'%subject)
+        print('---------------------')
     blockpath = os.path.join(path, blockname)
 
     if rank==0:
@@ -173,8 +192,10 @@ def process_block(args):
                            if all_event_times.size else df['align'][match & (df['mode'] == 'speak')])
 
     if rank==0:
-        print('\nGenerated data matrices ...')
+        print('\nGenerating data matrices ...')
         count=1
+        tic = time.time()
+
     for token in tokens:
         match = (df['label'] == token)
         event_times = df['align'][match & (df['mode'] == 'speak')]
@@ -183,6 +204,10 @@ def process_block(args):
 
         start_times[token] = start.astype(float)
         stop_times[token] = stop.astype(float)
+
+        if rank==0:
+            tictic = time.time()
+
         data = make_data.run_makeD(blockpath, event_times, align_window,
                                    data_type, zscore, all_event_times, fband)
 
@@ -191,16 +216,21 @@ def process_block(args):
 
         D[token] = data
 
+        B = np.ones(len(tokens),dtype=np.int)*block
+
         if rank==0:
-            print('\n\tData matrix %i/%i done!'%(count,len(tokens)))
+            toctoc = time.time()-tictic
+            print('\n-->Data matrix %i/%i done in %.2f seconds'%(count,len(tokens),toctoc))
+            print '\n-->Estimated remaining time: %.2f seconds'%(toctoc*(len(tokens)-count))
             count+=1
 
     if rank==0:
-        print('\nData generated succesfully')
+        toc = time.time()-tic
+        print '\nData generated succesfully in %.2f seconds'%toc
 
-    return (start_times, stop_times, D)
+    return (start_times, stop_times, D, B)
 
-def save_hdf5(fname, D, tokens, anat):
+def save_hdf5(fname, D, tokens, anat, B):
     """
     Save processed data to hdf5.
 
@@ -237,6 +267,7 @@ def save_hdf5(fname, D, tokens, anat):
     with h5py.File(fname, 'w') as f:
         f.create_dataset('X', data=X.astype('float32'))
         f.create_dataset('y', data=y)
+        f.create_dataset('block', data=B)
         f.create_dataset('tokens', data=tokens)
         grp = f.create_group('anatomy')
         for key in sorted(anat.keys()):
