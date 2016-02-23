@@ -1,6 +1,6 @@
 __author__ = 'David Conant, Jesse Livezey'
 
-import os, glob, csv, h5py
+import os, glob, csv, h5py, pdb
 import numpy as np
 import scipy as sp
 
@@ -12,6 +12,7 @@ from scikits.samplerate import resample
 import ..utils
 import from ..utils import HTK, transcripts
 import .HTK_hilb
+
 
 def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
               all_event_times=None,fband=None):
@@ -83,38 +84,9 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
 
         s, fs = load_AS(blockpath,part,fband)
 
-#        s = zscoreD(s,fs,bad_times,align_window,zscore,all_event_times)
-
-#        print s.shape,fs
-
-        if zscore == 'whole':
-            s = stats.zscore(s, axis=1)
-        elif zscore == 'data':
-            tt_data = np.arange(s.shape[1]) / fs
-            data_start = all_event_times.min() + align_window[0]
-            data_stop = all_event_times.max() + align_window[1]
-            data_time = utils.isin(tt_data, np.array([data_start, data_stop]))
-            for bt in bad_times:
-                data_time = data_time & ~utils.isin(tt_data, bt)
-            data = s[:, data_time]
-            means = data.mean(axis=1, keepdims=True)
-            stds = data.std(axis=1, keepdims=True)
-            s = (s - means)/stds
-        elif zscore == 'events':
-            tt_data = np.arange(s.shape[1]) / fs
-            data_time = np.zeros_like(tt_data).astype(bool)
-            for et in all_event_times:
-                data_time = data_time | utils.isin(tt_data, et + align_window)
-            for bt in bad_times:
-                data_time = data_time & ~utils.isin(tt_data, bt)
-            data = s[:, data_time]
-            means = data.mean(axis=1, keepdims=True)
-            stds = data.std(axis=1, keepdims=True)
-            s = (s - means) / stds
-        elif ((zscore is None) or (zscore.lower() == 'none')):
-            pass
-        else:
-            raise ValueError('zscore type {} not recognized.'.format(zscore))
+        s = zscoreD(data=s,sampling_rate=fs,bad_times=bad_times,\
+                    align_window=align_window,mode=zscore,\
+                    all_event_times=all_event_times)
 
         D = makeD(s, fs, event_times, align_window,
                   bad_times=bad_times, bad_electrodes=bad_electrodes)
@@ -149,10 +121,10 @@ def zscoreD(data,sampling_rate,bad_times,align_window,mode='events',\
         data_time = utils.isin(tt_data, np.array([data_start, data_stop]))
         for bt in bad_times:
             data_time = data_time & ~utils.isin(tt_data, bt)
-        data = data[:, data_time]
-        means = data.mean(axis=1, keepdims=True)
-        stds = data.std(axis=1, keepdims=True)
-        data = (data - means)/stds
+        tmp   = data[:, data_time]
+        means = tmp.mean(axis=1, keepdims=True)
+        stds  = tmp.std(axis=1, keepdims=True)
+        data  = (data - means)/stds
     elif mode == 'events':
         tt_data = np.arange(data.shape[1]) / sampling_rate
         data_time = np.zeros_like(tt_data).astype(bool)
@@ -160,10 +132,10 @@ def zscoreD(data,sampling_rate,bad_times,align_window,mode='events',\
             data_time = data_time | utils.isin(tt_data, et + align_window)
         for bt in bad_times:
             data_time = data_time & ~utils.isin(tt_data, bt)
-        data = data[:, data_time]
-        means = data.mean(axis=1, keepdims=True)
-        stds = data.std(axis=1, keepdims=True)
-        data = (data - means) / stds
+        tmp   = data[:, data_time]
+        means = tmp.mean(axis=1, keepdims=True)
+        stds  = tmp.std(axis=1, keepdims=True)
+        data  = (data - means) / stds
     elif ((mode is None) or (mode.lower() == 'none')):
         pass
     else:
@@ -213,6 +185,7 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
 
     for ievent, time in enumerate(event_times):
         event_data = data[:, time_idx(time) + window_start:time_idx(time) + window_start + window_length].T
+        pdb.set_trace()
         assert event_data.shape[0] == D.shape[1]
         D[ievent] = event_data
 
@@ -250,19 +223,12 @@ def load_AS(blockpath, part='R', fband=18):
     elif part=='I':
         htk_path = os.path.join(blockpath, 'HilbImag_4to200_40band')
 
-
     HTKout = HTK_hilb.read_HTKs(htk_path)
-
-    print HTKout['data'].shape
 
     s = HTKout['data'][fband]
 
-    print s.shape
-
     # Frequency in Hz
     fs = HTKout['sampling_rate']/1e4
-
-    print fs
 
     return (s, fs)
 

@@ -100,10 +100,15 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
 
     args = [(subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband)
             for block in blocks]
+    print '\nNumbers of blocks to be processed: %i'%(len(blocks))
+
     if mp:
+        global pool
         pool = multiprocessing.Pool()
+        print '\nProcessing blocks in parallel with %i processes...'%(pool._processes)
         results = pool.map(process_block, args)
     else:
+        print '\nProcessing blocks serially ...'
         results = map(process_block, args)
 
     for Bstart, Bstop, BD in results:
@@ -115,7 +120,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
             D[token] = (np.vstack((D[token], BD[token])) if
                         D[token].size else BD[token])
 
-    print('Saving to: '+fname)
+    print('\nSaving to: '+fname)
     save_hdf5(fname, D, tokens, anat)
 
     return (D, anat, start_times, stop_times)
@@ -131,19 +136,34 @@ def process_block(args):
     path : str
     tokens : list of str
     """
-    
+    if mp==True:
+        rank = os.getpid()
+    else:
+        rank = 0
+
+
+
     subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband = args
 
     blockname = subject + '_B' + str(block)
-    print('Processing block ' + blockname)
+    if rank==0:
+        print('\nProcessing block %s'%str(blockname))
+        print('-------------------')
     blockpath = os.path.join(path, blockname)
+
+    if rank==0:
+        print('\nConvert parseout to dataframe ...')
     # Convert parseout to dataframe
     parseout = transcripts.parse(blockpath, blockname)
     df = transcripts.make_df(parseout, block, subject, align_pos)
+    if rank==0:
+        print('\nDataframe generated succesfully!')
+
 
     D = dict()
     stop_times = dict()
     start_times = dict()
+
 
     all_event_times = np.array([])
     for token in tokens:
@@ -152,6 +172,9 @@ def process_block(args):
                                       df['align'][match & (df['mode'] == 'speak')]))
                            if all_event_times.size else df['align'][match & (df['mode'] == 'speak')])
 
+    if rank==0:
+        print('\nGenerated data matrices ...')
+        count=1
     for token in tokens:
         match = (df['label'] == token)
         event_times = df['align'][match & (df['mode'] == 'speak')]
@@ -162,9 +185,18 @@ def process_block(args):
         stop_times[token] = stop.astype(float)
         data = make_data.run_makeD(blockpath, event_times, align_window,
                                    data_type, zscore, all_event_times, fband)
+
 #        resampled_data = make_data.resample_data(data)
 #        D[token] = resampled_data
+
         D[token] = data
+
+        if rank==0:
+            print('\n\tData matrix %i/%i done!'%(count,len(tokens)))
+            count+=1
+
+    if rank==0:
+        print('\nData generated succesfully')
 
     return (start_times, stop_times, D)
 
