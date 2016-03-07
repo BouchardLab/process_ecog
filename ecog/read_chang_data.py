@@ -167,7 +167,7 @@ def process_block(args):
     blockname = subject + '_B' + str(block)
     if rank==0:
         print('\nProcessing subject %s'%subject)
-        print('---------------------')
+        print('-----------------------')
     blockpath = os.path.join(path, blockname)
 
     if rank==0:
