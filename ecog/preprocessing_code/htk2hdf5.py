@@ -3,13 +3,7 @@ import h5py
 import HTK_hilb
 import argparse
 
-def htk_to_hdf5(block):
-
-    subject = 'GP31'
-
-    path  = '/global/project/projectdirs/m2043/BRAINdata/Humans/tmp'
-
-    parts = ['HilbImag_4to200_40band','HilbReal_4to200_40band','HilbAA_70to150_8band']
+def htk_to_hdf5(block,subject,path):
 
     parts = ['HilbImag_4to200_40band','HilbReal_4to200_40band','HilbAA_70to150_8band']
 
@@ -34,5 +28,7 @@ def htk_to_hdf5(block):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='HTK to HDF5')
     parser.add_argument('-b', '--block', type=int, default=1)
+    parser.add_argument('-p','--path', help='path to data folder')
+    parser.add_argument('-s','--subject', help='subject code')
     args = parser.parse_args()
-    htk_to_hdf5(args.block)
+    htk_to_hdf5(args.block,args.subject,args.path)

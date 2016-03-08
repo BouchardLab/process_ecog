@@ -97,9 +97,6 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     D = dict((token, np.array([])) for token in tokens)
     stop_times = dict((token, np.array([])) for token in tokens)
     start_times = dict((token, np.array([])) for token in tokens)
-    B = dict((token, np.array([])) for token in tokens)
-
-
 
     args = [(subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband)
             for block in blocks]
@@ -119,7 +116,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         print '\nProcessing blocks serially ...'
         results = map(process_block, args)
 
-    for Bstart, Bstop, BD, Bn in results:
+    for Bstart, Bstop, BD,_ in results:
         for token in tokens:
             start_times[token] = (np.hstack((start_times[token], Bstart[token])) if
                                   start_times[token].size else Bstart[token])
@@ -127,13 +124,13 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                                  stop_times[token].size else Bstop[token])
             D[token] = (np.vstack((D[token], BD[token])) if
                         D[token].size else BD[token])
-            B[token] = (np.hstack((B[token], Bn[token])) if
-                                 B[token].size else Bn[token])
+
+    B = results[0][-1]
 
     print('\nSaving to: '+fname)
-    save_hdf5(fname, D, tokens, anat)
+    save_hdf5(fname, D, tokens, anat, B)
 
-    return (D, anat, start_times, stop_times,B)
+    return (D, anat, start_times, stop_times, B)
 
 def process_block(args):
     """
@@ -216,8 +213,6 @@ def process_block(args):
 
         D[token] = data
 
-        B = np.ones(len(tokens),dtype=np.int)*block
-
         if rank==0:
             toctoc = time.time()-tictic
             print('\n-->Data matrix %i/%i done in %.2f seconds'%(count,len(tokens),toctoc))
@@ -227,6 +222,8 @@ def process_block(args):
     if rank==0:
         toc = time.time()-tic
         print '\nData generated succesfully in %.2f seconds'%toc
+
+    B = np.ones(len(tokens),dtype=np.int)*block
 
     return (start_times, stop_times, D, B)
 

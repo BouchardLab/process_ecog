@@ -246,21 +246,27 @@ def load_AS(blockpath, part='R', fband=18):
     elif part=='I':
         htk_path = os.path.join(blockpath, 'HilbImag_4to200_40band')
 
+    htk_path = '%s_%i.h5'%(htk_path,fband)
+
     if rank==0:
         print('\nReading HTKs from %s'%htk_path)
         print('\nFrequency band: %i'%fband)
         print('\nLoading please wait ...')
-        
-        #HTKout = HTK_hilb.read_HTKs(htk_path)
-    
-    with h5py.File(htk_path) as HTKout:
-        s = HTKout['data'][fband]
-        # Frequency in Hz
-        fs = HTKout['sampling_rate']/1e4
+
+#    HTKout = HTK_hilb.readHTKs(htk_path)
+
+    HTKout = h5py.File(htk_path,'r')
+
+    s = HTKout['data'].value
 
     if rank==0:
         print('\nHTKs read!')
 
+    # Frequency in Hz
+#    fs = HTKout['sampling_rate']/1e4
+    fs = HTKout['sampling_rate'][0]
+
+    print fs
 
     return (s, fs)
 
