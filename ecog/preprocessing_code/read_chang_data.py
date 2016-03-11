@@ -157,7 +157,6 @@ def process_block(args):
                                    data_type, zscore, all_event_times)
         resampled_data = make_data.resample_data(data)
         D[token] = resampled_data
-        D[token] = data
 
     return (start_times, stop_times, D)
 
