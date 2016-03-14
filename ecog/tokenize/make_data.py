@@ -249,12 +249,11 @@ def load_AS(blockpath, part='R', fband=18):
     elif part=='AA':
         htk_path = [os.path.join(blockpath, 'HilbReal_4to200_40band'),\
                     os.path.join(blockpath, 'HilbImag_4to200_40band')]
-
-    for hp in htk_path:
-        hp = '%s_%i.h5'%(hp,fband)
+    for i in xrange(len(htk_path)):
+        htk_path[i] = '%s_%i.h5'%(htk_path[i],fband)
 
     if rank==0:
-        print('\nReading HTKs from %s'%htk_path)
+        print('\nReading data from %s'%htk_path)
         print('\nFrequency band: %i'%fband)
         print('\nLoading please wait ...')
 
@@ -317,7 +316,7 @@ def loadForm(blockpath):
 
 def load_anatomy(subj_dir):
 
-    anatomy_filename = glob.glob(os.path.join(subj_dir, 'Anatomy', '*_anatomy.mat'))[0]
+    anatomy_filename = glob.glob(os.path.join(subj_dir, 'anatomy', '*_anatomy.mat'))[0]
     elect_labels_filename = glob.glob(os.path.join(subj_dir, 'elec_labels.mat'))
 
     electrode_labels = dict()

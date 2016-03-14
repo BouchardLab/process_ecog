@@ -116,7 +116,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         print '\nProcessing blocks serially ...'
         results = map(process_block, args)
 
-    for Bstart, Bstop, BD,_ in results:
+    for Bstart, Bstop, BD, _ in results:
         for token in tokens:
             start_times[token] = (np.hstack((start_times[token], Bstart[token])) if
                                   start_times[token].size else Bstart[token])
