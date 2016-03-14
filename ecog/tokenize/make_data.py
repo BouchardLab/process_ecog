@@ -243,13 +243,15 @@ def load_AS(blockpath, part='R', fband=18):
     """
 
     if part=='R':
-        htk_path = os.path.join(blockpath, 'HilbReal_4to200_40band')
+        htk_path = [os.path.join(blockpath, 'HilbReal_4to200_40band')]
     elif part=='I':
-        htk_path = os.path.join(blockpath, 'HilbImag_4to200_40band')
+        htk_path = [os.path.join(blockpath, 'HilbImag_4to200_40band')]
     elif part=='AA':
-        htk_path = os.path.join(blockpath, 'HilbAA_70to150_8band')
+        htk_path = [os.path.join(blockpath, 'HilbReal_4to200_40band'),\
+                    os.path.join(blockpath, 'HilbImag_4to200_40band')]
 
-    htk_path = '%s_%i.h5'%(htk_path,fband)
+    for hp in htk_path:
+        hp = '%s_%i.h5'%(hp,fband)
 
     if rank==0:
         print('\nReading HTKs from %s'%htk_path)
@@ -258,16 +260,21 @@ def load_AS(blockpath, part='R', fband=18):
 
 #    HTKout = HTK_hilb.readHTKs(htk_path)
 
-    HTKout = h5py.File(htk_path,'r')
+    if len(htk_path)==1:
+        HTKout = h5py.File(htk_path,'r')
+        s = HTKout['data'].value
+        if rank==0:
+            print('\nHTKs read!')
+        # Frequency in Hz
+        fs = HTKout['sampling_rate'][0]
+    elif len(htk_path)==2:
+        HTKoutR = h5py.File(htk_path[0],'r')
+        HTKoutI = h5py.File(htk_path[1],'r')
+        s = np.abs(HTKoutR['data'].value+1j*HTKoutI['data'].value)
+        # Frequency in Hz
+        fs = HTKoutR['sampling_rate'][0]
 
-    s = HTKout['data'].value
-
-    if rank==0:
-        print('\nHTKs read!')
-
-    # Frequency in Hz
 #    fs = HTKout['sampling_rate']/1e4
-    fs = HTKout['sampling_rate'][0]
 
     print fs
 
