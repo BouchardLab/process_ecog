@@ -127,7 +127,8 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
     options = {'HG' : HG,
                'form' : form,
                'AS_I' : AS,
-               'AS_R' : AS}
+               'AS_R' : AS,
+               'AS_AA': AS,}
 
     D = options[data_type]()
 
@@ -245,6 +246,8 @@ def load_AS(blockpath, part='R', fband=18):
         htk_path = os.path.join(blockpath, 'HilbReal_4to200_40band')
     elif part=='I':
         htk_path = os.path.join(blockpath, 'HilbImag_4to200_40band')
+    elif part=='AA':
+        htk_path = os.path.join(blockpath, 'HilbAA_70to150_8band')
 
     htk_path = '%s_%i.h5'%(htk_path,fband)
 

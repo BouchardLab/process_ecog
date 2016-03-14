@@ -55,7 +55,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     else:
         raise ValueError("task must of one of ['CV']: "+str(task)+'.')
 
-    if data_type not in ['HG','AS_I','AS_R']:
+    if data_type not in ['HG','AS_I','AS_R','AS_AA']:
         raise ValueError("data_type must be one of ['HG','AS_I','AS_R']: "+str(data_type)+'.')
 
     if fband==None and 'AS' in data_type:
