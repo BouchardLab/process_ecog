@@ -310,7 +310,7 @@ def loadForm(blockpath):
 
 def load_anatomy(subj_dir):
 
-    anatomy_filename = glob.glob(os.path.join(subj_dir, 'anatomy', '*_anatomy.mat'))[0]
+    anatomy_filename = glob.glob(os.path.join(subj_dir, 'Anatomy', '*_anatomy.mat'))[0]
     elect_labels_filename = glob.glob(os.path.join(subj_dir, 'elec_labels.mat'))
 
     electrode_labels = dict()
