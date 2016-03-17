@@ -97,26 +97,21 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     D = dict((token, np.array([])) for token in tokens)
     stop_times = dict((token, np.array([])) for token in tokens)
     start_times = dict((token, np.array([])) for token in tokens)
+    B = dict((token, np.array([],dtype='int')) for token in tokens)
 
     args = [(subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband)
             for block in blocks]
     print '\nNumbers of blocks to be processed: %i'%(len(blocks))
 
-<<<<<<< HEAD:ecog/read_chang_data.py
-    if mp:
-        global pool
-        pool = multiprocessing.Pool()
-=======
     if mp and len(blocks)>1:
         pool = multiprocessing.Pool(len(blocks))
->>>>>>> b45a309... changes to make_data.py:ecog/preprocessing_code/read_chang_data.py
         print '\nProcessing blocks in parallel with %i processes...'%(pool._processes)
         results = pool.map(process_block, args)
     else:
         print '\nProcessing blocks serially ...'
         results = map(process_block, args)
 
-    for Bstart, Bstop, BD, _ in results:
+    for Bstart, Bstop, BD, Bnumber in results:
         for token in tokens:
             start_times[token] = (np.hstack((start_times[token], Bstart[token])) if
                                   start_times[token].size else Bstart[token])
@@ -124,8 +119,8 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                                  stop_times[token].size else Bstop[token])
             D[token] = (np.vstack((D[token], BD[token])) if
                         D[token].size else BD[token])
-
-    B = results[0][-1]
+            B[token] = (np.hstack((B[token], Bnumber[token])) if
+                        B[token].size else Bnumber[token])
 
     print('\nSaving to: '+fname)
     save_hdf5(fname, D, tokens, anat, B)
@@ -143,16 +138,6 @@ def process_block(args):
     path : str
     tokens : list of str
     """
-<<<<<<< HEAD:ecog/read_chang_data.py
-    if mp==True:
-        rank = os.getpid()
-    else:
-        rank = 0
-
-
-
-=======
->>>>>>> b45a309... changes to make_data.py:ecog/preprocessing_code/read_chang_data.py
     subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband = args
 
     try:
@@ -179,7 +164,7 @@ def process_block(args):
     D = dict()
     stop_times = dict()
     start_times = dict()
-
+    B = dict()
 
     all_event_times = np.array([])
     for token in tokens:
@@ -213,6 +198,9 @@ def process_block(args):
 
         D[token] = data
 
+        B[token] = np.ones(data.shape[0],dtype='int')*block
+
+
         if rank==0:
             toctoc = time.time()-tictic
             print('\n-->Data matrix %i/%i done in %.2f seconds'%(count,len(tokens),toctoc))
@@ -222,8 +210,6 @@ def process_block(args):
     if rank==0:
         toc = time.time()-tic
         print '\nData generated succesfully in %.2f seconds'%toc
-
-    B = np.ones(len(tokens),dtype=np.int)*block
 
     return (start_times, stop_times, D, B)
 
@@ -244,6 +230,7 @@ def save_hdf5(fname, D, tokens, anat, B):
     labels = np.array(range(len(tokens)))
     X = None
     y = None
+    bn = None
     for label, token in zip(labels, tokens):
         X_t = D[token]
         if X is None:
@@ -254,6 +241,13 @@ def save_hdf5(fname, D, tokens, anat, B):
             y = label * np.ones(X_t.shape[0], dtype=int)
         else:
             y = np.hstack((y, label * np.ones(X_t.shape[0], dtype=int)))
+
+        bn_t = B[token]
+        if bn is None:
+           bn = bn_t
+        else:
+           bn = np.hstack((bn,bn_t))
+
     folder, f = os.path.split(fname)
 
     try:
@@ -264,7 +258,7 @@ def save_hdf5(fname, D, tokens, anat, B):
     with h5py.File(fname, 'w') as f:
         f.create_dataset('X', data=X.astype('float32'))
         f.create_dataset('y', data=y)
-        f.create_dataset('block', data=B)
+        f.create_dataset('block', data=bn)
         f.create_dataset('tokens', data=tokens)
         grp = f.create_group('anatomy')
         for key in sorted(anat.keys()):

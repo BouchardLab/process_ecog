@@ -260,7 +260,7 @@ def load_AS(blockpath, part='R', fband=18):
 #    HTKout = HTK_hilb.readHTKs(htk_path)
 
     if len(htk_path)==1:
-        HTKout = h5py.File(htk_path,'r')
+        HTKout = h5py.File(htk_path[0],'r')
         s = HTKout['data'].value
         if rank==0:
             print('\nHTKs read!')
@@ -274,8 +274,6 @@ def load_AS(blockpath, part='R', fband=18):
         fs = HTKoutR['sampling_rate'][0]
 
 #    fs = HTKout['sampling_rate']/1e4
-
-    print fs
 
     return (s, fs)
 
