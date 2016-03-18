@@ -1,18 +1,49 @@
 #!/usr/bin/env python
 import numpy as np
-import argparse,h5py,multiprocessing,sys,os,time,pdb,glob
+import optparse,h5py,multiprocessing,sys,os,time,pdb,glob
 from sklearn.decomposition import FastICA,PCA
 from scipy.io import loadmat
 
 __author__ = 'Alex Bujan'
 
+def main():
+    usage = '%prog [options]'
+    parser = OptionParser(usage)
+
+    parser.add_option('-p','--path', type='string',default='')
+    parser.add_option('-e','--elect_path',type='string',default='')
+    parser.add_option('-b','--bad_path',type='string',default='')
+    parser.add_option('-n','--n_processes', type='int',default=1)
+    parser.add_option("--vsmc",action='store_true',dest='vsmc')
+    parser.add_option("--zscore",action='store_true',dest='vsmc')
+    parser.add_option('-k','--n_components',type='int' default=None)
+
+    (options, args) = parser.parse_args()
+
+    ldir = glob.glob(options.path)
+
+    args = [(filename,options.elect_path,options.vsmc,\
+            options.bad_path,options.zscore,options.n_components)
+            for filename in ldir]
+
+    pdb.set_trace()
+
+    if len(ldir)>1:
+        pool = multiprocessing.Pool(options.n_processes)
+        print '\nComputing ICA in parallel with %i processes...'%(pool._processes)
+        results = pool.map(computeICA,args)
+    else:
+        print '\nComputing ICA serially ...'
+        results = map(computeICA,args)
+
+
 def computeICA(args):
-    filename,electrode_path,vsmc,bad_path,zscore,n_components=args
+    filename,elect_path,vsmc,bad_path,zscore,n_components=args
     with h5py.File(filename,'r') as f:
         X = f['X'].value
         y = f['y'].value
         blocks_ = f['block'].value
-    electrodes = loadmat(electrode_path)
+    electrodes = loadmat(elect_path)
     if vsmc:
         elects = np.hstack([electrodes['anatomy']['preCG'][0][0][0],electrodes['anatomy']['postCG'][0][0][0]])-1
     else:
@@ -58,27 +89,6 @@ def computeICA(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Compute ICA')
-    parser.add_argument('-p', '--path', type=str,default='')
-    parser.add_argument('-e', '--electrode_path',type=str,default='')
-    parser.add_argument('-b', '--bad_path',type=str,default='')
-    parser.add_argument('-n', '--processes', type=int, default=1)
-    parser.add_argument('-v', '--vsmc', type=bool, default=True)
-    parser.add_argument('-z', '--zscore', type=bool, default=True)
-    parser.add_argument('-k', '--n_components', default=None)
-    args = parser.parse_args()
-    ldir = glob.glob(args.path)
-    assert args.path is not None and args.electrode_path is not None and args.bad_path is not None
-    args_ = [(filename,args.electrode_path,args.vsmc,\
-            args.bad_path,args.zscore,args.n_components)
-            for filename in ldir]
-    pdb.set_trace()
-    if len(ldir)>1:
-        pool = multiprocessing.Pool(args.processes)
-        print '\nComputing ICA in parallel with %i processes...'%(pool._processes)
-        results = pool.map(computeICA,args_)
-    else:
-        print '\nComputing ICA serially ...'
-        results = map(computeICA,args_)
+    main()
 
 
