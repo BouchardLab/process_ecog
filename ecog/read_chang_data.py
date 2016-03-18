@@ -278,6 +278,7 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--mp', default=True)
     parser.add_argument('-f', '--fband', type=int, default=18)
     args = parser.parse_args()
+    pdb.set_trace()
     htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
                 args.align_window, args.align_pos, args.data_type, args.zscore,
                 args.fband, args.mp)

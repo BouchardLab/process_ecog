@@ -59,24 +59,26 @@ def computeICA(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Compute ICA')
-    parser.add_argument('path', help='glob path to retrieve files')
+    parser.add_argument('-p', '--path', type=str,default='')
+    parser.add_argument('-e', '--electrode_path',type=str,default='')
+    parser.add_argument('-b', '--bad_path',type=str,default='')
     parser.add_argument('-n', '--processes', type=int, default=1)
-    parser.add_argument('-e', '--electrode_path', default=None)
     parser.add_argument('-v', '--vsmc', type=bool, default=True)
-    parser.add_argument('-b', '--bad_path', default=None)
     parser.add_argument('-z', '--zscore', type=bool, default=True)
     parser.add_argument('-k', '--n_components', default=None)
     args = parser.parse_args()
     ldir = glob.glob(args.path)
-    args = [(filename,args.electrode_path,args.vsmc,\
+    assert args.path is not None and args.electrode_path is not None and args.bad_path is not None
+    args_ = [(filename,args.electrode_path,args.vsmc,\
             args.bad_path,args.zscore,args.n_components)
             for filename in ldir]
+    pdb.set_trace()
     if len(ldir)>1:
         pool = multiprocessing.Pool(args.processes)
         print '\nComputing ICA in parallel with %i processes...'%(pool._processes)
-        results = pool.map(computeICA,args)
+        results = pool.map(computeICA,args_)
     else:
         print '\nComputing ICA serially ...'
-        results = map(computeICA,args)
+        results = map(computeICA,args_)
 
 
