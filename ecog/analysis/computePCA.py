@@ -1,14 +1,11 @@
 #!/usr/bin/env python
 from __future__ import division
-import pdb,os,time,warnings
 import numpy as np
-from math import log
 from numpy.linalg import *
-from numpy.random import rand
 
 
 def computePCA(X,n_components=None,whiten=True):
-    """Computes the principal components of X
+    """Computes the principal components of X. X can be complex-valued.
     
     Parameters
     ----------
@@ -26,10 +23,14 @@ def computePCA(X,n_components=None,whiten=True):
     Returns
     -------
 
+    X : array, shape (n_components,n_samples)
+
     K : array, shape (n_components, n_features)
         If whiten is 'True', K is the pre-whitening matrix 
-        projecting the data onto the principal components. 
-        If whiten is 'False', K is 'None'.
+        projecting the data onto the principal components.
+    Ux: array, shape (n_components,)
+        Eigenvalues associated with principal components.
+
     """
 
     n,m  = X.shape
@@ -42,6 +43,6 @@ def computePCA(X,n_components=None,whiten=True):
     else:
         K = Sx.conj().T[:n]
     X = K.dot(X)
-    return X,K,Ux
+    return X,K,Ux[:n]
 
 
