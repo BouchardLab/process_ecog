@@ -4,7 +4,7 @@ import h5py,multiprocessing,sys,os,time,pdb,glob
 from sklearn.decomposition import FastICA,PCA
 from scipy.io import loadmat
 from optparse import OptionParser
-from preprocessing_code.selectElectrodes import selectElectrodes
+from utils.selectElectrodes import selectElectrodes
 
 __author__ = 'Alex Bujan'
 
