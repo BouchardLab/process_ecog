@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 import numpy as np
 import h5py,multiprocessing,sys,os,time,pdb,glob
-from sklearn.decomposition import FastICA,PCA
 from scipy.io import loadmat
 from optparse import OptionParser
 from utils.selectElectrodes import selectElectrodes
+from computePCA import computePCA
+
 
 __author__ = 'Alex Bujan'
 
@@ -16,9 +17,9 @@ def main():
     parser.add_option('-s','--subject',type='string',default='')
     parser.add_option('-n','--n_processes', type='int',default=1)
     parser.add_option('-m','--max_iter', type='int',default=1000)
-    parser.add_option("--vsmc",action='store_true',dest='vsmc')
-    parser.add_option("--zscore",action='store_true',dest='zscore')
+    parser.add_option('-v','--vsmc',action='store_true',dest='vsmc')
     parser.add_option('-k','--n_components',type='int',default=-1)
+    parser.add_option('-a','--analysis',type='string',default='dPCA')
 
     (options, args) = parser.parse_args()
 
@@ -37,18 +38,18 @@ def main():
     else:
         ldir = [options.path]
 
-    args_ = [(filename,options.subject,vsmc,zscore,options.n_components,options.max_iter)
-            for filename in ldir]
+    args_list = [(filename,options.subject,vsmc,options.n_components,\
+              options.max_iter,options.analysis) for filename in ldir]
 
     if len(ldir)>1:
         pool = multiprocessing.Pool(options.n_processes)
-        print '\nComputing ICA in parallel with %i processes...'%(pool._processes)
-        results = pool.map(computeICA,args_)
+        print '\nAnalysing in parallel with %i processes...'%(pool._processes)
+        results = pool.map(compute,args_list)
     else:
-        print '\nComputing ICA serially ...'
-        results = map(computeICA,args_)
+        print '\nAnalysing serially ...'
+        results = map(compute,args_list)
 
-def computeICA(args):
+def compute(args):
 
     try:
         process = multiprocessing.current_process()
@@ -56,7 +57,7 @@ def computeICA(args):
     except:
         rank = 0
 
-    filename,subject,vsmc,zscore,n_components,max_iter=args
+    filename,subject,vsmc,n_components,max_iter,analysis=args
 
     if rank==0:
         print '\nLoading file %s ...'%filename
@@ -72,54 +73,62 @@ def computeICA(args):
 
     X = X[...,elects]
 
-    if zscore:
-        X = (X-X.mean(1,keepdims=True))/X.std(1,keepdims=True)
+    t,m,n = X.shape
 
-    X_ica = np.zeros_like(X)
-
-    if n_components==-1:
+    if n_components<=0:
         n_components=X.shape[-1]
 
+    X_new = np.zeros((m,n_components),dtype=np.complex)
+
+    if analysis=='dPCA':
+        X_dem = np.zeros((m,n))
+
     if rank==0:
-        print '\nComputing ICA with %i components ...'%n_components
+        print '\nComputing %s with %i components ...'%(analysis,n_components)
 
     tic = time.time()
 
-    for i in xrange(X.shape[0]):
+    for i in xrange(t):
         try:
-            ica = FastICA(n_components=n_components,whiten=True,max_iter=max_iter)
-            X_ica[i] = ica.fit_transform(X[i])
+            if analysis=='dPCA':
+                X_new[i] = computePCA(X[i].T,n_components=n_components,whiten=True)[0].T
+                X_dem[i] = X[i]*np.exp(-np.angle(X_new[0])*1j)
+            elif analysis=='cICA':
+                pass
         except:
-            X_ica[i] = np.ones_like(X[i])*np.nan
+            X_new[i] = np.ones_like(X[i])*np.nan
             if rank==0:
-                print '\nUtterance %i could not be analyzed'%i
+                print '\nTrial %i could not be analyzed'%i
     if rank==0:
-        print '\nICA analysis completed in %.4f seconds'%(time.time()-tic)
+        print '\n%s analysis completed in %.4f seconds'%(analysis,time.time()-tic)
 
-    bad_icas = np.unique(np.where(np.isnan(X_ica))[0])
-    ids = np.setdiff1d(np.arange(X_ica.shape[0]),bad_icas)
+    bad_trials = np.unique(np.where(np.isnan(X_new))[0])
+    ids = np.setdiff1d(np.arange(m),bad_trials)
 
-    X_ica = X_ica[ids]
-    y_ica = y[ids]
-    blocks_ica = blocks[ids]
+    if len(ids)!=0:
+        X_new = X_new[ids]
+        y_new = y[ids]
+        blocks_new = blocks[ids]
 
     output_path,output_filename = os.path.split(os.path.normpath(filename))
-    output_path+='/ICA'
+    output_path+='/%s'%analysis
 
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
     output_filename = output_filename.split('.h5')[0]
-    output_filename+='_%i_ICA.h5'%n_components
+    output_filename+='_%i_%s.h5'%(n_components,analysis)
     output_filename = os.path.join(output_path,output_filename)
 
     if rank==0:
         print '\nSaving the data in %s ...'%output_filename
 
     with h5py.File(output_filename,'w') as f:
-        f.create_dataset('X', data=X_ica.astype('float32'),compression='gzip')
-        f.create_dataset('y', data=y_ica,compression='gzip')
-        f.create_dataset('blocks',data=blocks_ica,compression='gzip')
+        f.create_dataset('X', data=X_new,compression='gzip')
+        if analysis=='dPCA':
+            f.create_dataset('Xd', data=X_new,compression='gzip')
+        f.create_dataset('y', data=y_new,compression='gzip')
+        f.create_dataset('blocks',data=blocks_new,compression='gzip')
         f.create_dataset('elects',data=elects,compression='gzip')
 
 if __name__ == "__main__":
