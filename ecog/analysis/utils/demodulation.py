@@ -21,7 +21,7 @@ def demodulation(X):
 
     """
 
-    pc1 = computePCA(X,n_components=1,whiten=True)
+    pc1 = computePCA(X,n_components=1,whiten=True)[0]
 
     return X*np.exp(-np.angle(pc1)*1j)
 
