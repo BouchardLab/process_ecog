@@ -7,7 +7,7 @@ from numpy.linalg import *
 from numpy.random import rand
 
 
-def computePCA(X,n_components=None):
+def computePCA(X,n_components=None,whiten=True):
     """Computes the principal components of X
     
     Parameters
@@ -25,9 +25,6 @@ def computePCA(X,n_components=None):
 
     Returns
     -------
-
-    W : array, shape (n_components, n_components)
-        Estimated un-mixing matrix.
 
     K : array, shape (n_components, n_features)
         If whiten is 'True', K is the pre-whitening matrix 
