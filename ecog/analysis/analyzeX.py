@@ -5,7 +5,7 @@ from scipy.io import loadmat
 from optparse import OptionParser
 from utils.selectElectrodes import selectElectrodes
 from computePCA import computePCA
-
+from complex_FastICA import complex_FastICA as cica
 
 __author__ = 'Alex Bujan'
 
@@ -14,7 +14,7 @@ def main():
     parser = OptionParser(usage)
 
     parser.add_option('-p','--path',type='string',default='')
-    parser.add_option('-s','--subject',type='string',default='')
+    parser.add_option('-s','--subject',type='string',default='EC2')
     parser.add_option('-n','--n_processes', type='int',default=1)
     parser.add_option('-m','--max_iter', type='int',default=1000)
     parser.add_option('-v','--vsmc',action='store_true',dest='vsmc')
@@ -23,24 +23,20 @@ def main():
 
     (options, args) = parser.parse_args()
 
-    if options.zscore is None:
-        zscore = False
-    else:
-        zscore = True
-
     if options.vsmc is None:
         vsmc = False
     else:
         vsmc = True
 
     if not os.path.isfile(options.path):
-        ldir = glob.glob('%s*.h5'%options.path)
+        ldir = glob.glob('%s'%options.path)
     else:
         ldir = [options.path]
 
     args_list = [(filename,options.subject,vsmc,options.n_components,\
               options.max_iter,options.analysis) for filename in ldir]
 
+    print len(ldir),ldir
     if len(ldir)>1:
         pool = multiprocessing.Pool(options.n_processes)
         print '\nAnalysing in parallel with %i processes...'%(pool._processes)
@@ -67,9 +63,7 @@ def compute(args):
         y = f['y'].value
         blocks = f['block'].value
 
-    blocks = np.unique(blocks)
-
-    elects = selectElectrodes(subject,blocks,vsmc)
+    elects = selectElectrodes(subject,np.unique(blocks),vsmc)
 
     X = X[...,elects]
 
@@ -78,10 +72,10 @@ def compute(args):
     if n_components<=0:
         n_components=X.shape[-1]
 
-    X_new = np.zeros((m,n_components),dtype=np.complex)
+    X_new = np.zeros((t,m,n_components),dtype=np.complex)
 
     if analysis=='dPCA':
-        X_dem = np.zeros((m,n))
+        X_dem = np.zeros((t,m,n),dtype=np.complex)
 
     if rank==0:
         print '\nComputing %s with %i components ...'%(analysis,n_components)
@@ -91,19 +85,20 @@ def compute(args):
     for i in xrange(t):
         try:
             if analysis=='dPCA':
+                pdb.set_trace()
                 X_new[i] = computePCA(X[i].T,n_components=n_components,whiten=True)[0].T
-                X_dem[i] = X[i]*np.exp(-np.angle(X_new[0])*1j)
+                X_dem[i] = (X[i].T*np.exp(-np.angle(X_new[i,:,0])*1j)).T
             elif analysis=='cICA':
-                pass
+                X_new[i] = cica(X[i].T,n_components=n_components,whiten=True)[0].T
         except:
-            X_new[i] = np.ones_like(X[i])*np.nan
+            X_new[i] = np.ones((m,n))*np.nan
             if rank==0:
                 print '\nTrial %i could not be analyzed'%i
     if rank==0:
         print '\n%s analysis completed in %.4f seconds'%(analysis,time.time()-tic)
 
     bad_trials = np.unique(np.where(np.isnan(X_new))[0])
-    ids = np.setdiff1d(np.arange(m),bad_trials)
+    ids = np.setdiff1d(np.arange(t),bad_trials)
 
     if len(ids)!=0:
         X_new = X_new[ids]
@@ -126,7 +121,7 @@ def compute(args):
     with h5py.File(output_filename,'w') as f:
         f.create_dataset('X', data=X_new,compression='gzip')
         if analysis=='dPCA':
-            f.create_dataset('Xd', data=X_new,compression='gzip')
+            f.create_dataset('Xd', data=X_dem,compression='gzip')
         f.create_dataset('y', data=y_new,compression='gzip')
         f.create_dataset('blocks',data=blocks_new,compression='gzip')
         f.create_dataset('elects',data=elects,compression='gzip')

@@ -10,7 +10,7 @@ def computePCA(X,n_components=None,whiten=True):
     Parameters
     ----------
 
-    X : array, shape (n_features,n_samples)
+    X : array, shape (n_features,n_sa   mples)
 
     whiten : boolean, optional
         If True, perform an initial whitening of the data.
