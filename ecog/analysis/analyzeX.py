@@ -37,6 +37,7 @@ def main():
               options.max_iter,options.analysis) for filename in ldir]
 
     print len(ldir),ldir
+
     if len(ldir)>1:
         pool = multiprocessing.Pool(options.n_processes)
         print '\nAnalysing in parallel with %i processes...'%(pool._processes)
@@ -82,16 +83,19 @@ def compute(args):
 
     tic = time.time()
 
-    for i in xrange(t):
+    for i in xrange(1):
         try:
             if analysis=='dPCA':
-                pdb.set_trace()
+                if i==0 and rank==0:
+                   print '\nComputing complex demodulation PCA transform ...'
                 X_new[i] = computePCA(X[i].T,n_components=n_components,whiten=True)[0].T
                 X_dem[i] = (X[i].T*np.exp(-np.angle(X_new[i,:,0])*1j)).T
             elif analysis=='cICA':
-                X_new[i] = cica(X[i].T,n_components=n_components,whiten=True)[0].T
+                if i==0 and rank==0:
+                   print '\nComputing complex ICA transform ...'
+                X_new[i] = cica(X[i].T,n_components=n_components,whiten=True,\
+                                max_iter=max_iter)[2].T
         except:
-            X_new[i] = np.ones((m,n))*np.nan
             if rank==0:
                 print '\nTrial %i could not be analyzed'%i
     if rank==0:
