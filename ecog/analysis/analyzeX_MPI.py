@@ -23,7 +23,7 @@ def main():
     parser.add_option('-i','--max_iter', type='int',default=1000)
     parser.add_option('-v','--vsmc',action='store_true',dest='vsmc')
     parser.add_option('-k','--n_components',type='int',default=-1)
-    parser.add_option('-a','--analysis',type='string',default='dPCA')
+    parser.add_option('-a','--analysis',type='string',default='cICA')
 
     (options, args) = parser.parse_args()
 
@@ -148,70 +148,107 @@ def compute(files,subject='EC2',vsmc=True,\
 
 
     my_X = my_X[...,elects]
-    t,m,n = my_X.shape
+    if FILE_rank==0:
+	print '\nRank [%i]: Shape of data set: %s'%(MAIN_rank,str(my_X.shape))
+
+    _,m,n = my_X.shape
+
+    assert n_trials_per_proc==_
 
     if n_components<=0:
         n_components=my_X.shape[-1]
 
-    my_X_new = np.zeros((t,m,n_components),dtype=np.complex)
+    my_X_new = np.zeros((n_trials_per_proc,m,n_components),dtype=np.complex)
 
     if analysis=='dPCA':
-        my_X_dem = np.zeros((t,m,n),dtype=np.complex)
+        my_X_dem = np.zeros((n_trials_per_proc,m,n),dtype=np.complex)
 
     if FILE_rank==0:
         print '\nRank [%i]: Computing %s with %i components ...'%(MAIN_rank,analysis,n_components)
         tic = MPI.Wtime()
 
-    for i in xrange(t):
-        try:
-            if analysis=='dPCA':
-                my_X_new[i] = computePCA(my_X[i].T,n_components=n_components,whiten=True)[0].T
-                my_X_dem[i] = (my_X[i].T*np.exp(-np.angle(my_X_new[i,:,0])*1j)).T
-            elif analysis=='cICA':
-                my_X_new[i] = cica(my_X[i].T,n_components=n_components,whiten=True)[0].T
-        except:
-            print '\nRank [%i]: Trial %i in batch %i could not be analyzed'%(MAIN_rank,i,new_comm_id)
+    for i in xrange(n_trials_per_proc):
+#        try:
+        if analysis=='dPCA':
+            my_X_new[i] = computePCA(my_X[i].T,n_components=n_components,whiten=True)[0].T
+            my_X_dem[i] = (my_X[i].T*np.exp(-np.angle(my_X_new[i,:,0])*1j)).T
+        elif analysis=='cICA':
+            my_X_new[i] = cica(my_X[i].T,n_components=n_components,whiten=True,\
+                               max_iter=max_iter)[2].T
+            if FILE_rank==0:
+                print '\nRank [%i]: cICA analysis finished successfully %i/%i!'%(MAIN_rank,i,n_trials_per_proc)
+
+#        except:
+#            print '\nRank [%i]: Trial %i in batch %i could not be analyzed'%(MAIN_rank,i,new_comm_id)
+
+#    if FILE_rank==0:
+#        print '\nRank [%i]: %s analysis completed in %.4f seconds'%(MAIN_rank,analysis,MPI.Wtime()-tic)
+#        X_new = np.zeros((n_proc_per_file,t,m,n_components),dtype=np.complex)
+#        if analysis=='dPCA':
+#            X_dem = np.zeros((n_proc_per_file,t,m,n),dtype=np.complex)
+#    else:
+#        X_new = None
+#        if analysis=='dPCA':
+#            X_dem = None
+
+#    FILE_comm.Barrier()
+#    FILE_comm.Gather([my_X_new,MPI.F_COMPLEX],[X_new,MPI.F_COMPLEX])
+#    if analysis=='dPCA':
+#        FILE_comm.Gather([my_X_dem,MPI.F_COMPLEX],[X_dem,MPI.F_COMPLEX])
+
+#    if FILE_rank==0:
+#        X_new = X_new.reshape((n_proc_per_file*n_trials_per_proc,m,n_components))
+#        if analysis=='dPCA':
+#            X_dem = X_dem.reshape((n_proc_per_file*n_trials_per_proc,m,n))
+
+#        output_path,output_filename = os.path.split(os.path.normpath(filename))
+#        output_path+='/%s'%analysis
+
+#        if not os.path.exists(output_path):
+#            os.makedirs(output_path)
+
+#        output_filename = output_filename.split('.h5')[0]
+#        output_filename+='_%i_%s.h5'%(n_components,analysis)
+#        output_filename = os.path.join(output_path,output_filename)
+
+#        if rank==0:
+#            print '\nSaving the data in %s ...'%output_filename
+
+#        with h5py.File(output_filename,'w') as f:
+#            f.create_dataset('X', data=X_new,compression='gzip')
+#            if analysis=='dPCA':
+#                f.create_dataset('Xd', data=X_dem,compression='gzip')
+#            f.create_dataset('y', data=y_new,compression='gzip')
+#            f.create_dataset('blocks',data=blocks_new,compression='gzip')
+#            f.create_dataset('elects',data=elects,compression='gzip')
+
+
+    output_path,output_filename = os.path.split(os.path.normpath(filename))
+    output_path+='/%s'%analysis
+
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    output_filename = output_filename.split('.h5')[0]
+    output_filename+='_%i_%s.h5'%(n_components,analysis)
+    output_filename = os.path.join(output_path,output_filename)
 
     if FILE_rank==0:
-        print '\nRank [%i]: %s analysis completed in %.4f seconds'%(MAIN_rank,analysis,MPI.Wtime()-tic)
-        X_new = np.zeros((n_proc_per_file,t,m,n_components),dtype=np.complex)
-        if analysis=='dPCA':
-            X_dem = np.zeros((n_proc_per_file,t,m,n),dtype=np.complex)
-    else:
-        X_new = None
-        if analysis=='dPCA':
-            X_dem = None
+        print '\nRank [%i]: Saving the data in %s ...'%(MAIN_rank,output_filename)
 
     FILE_comm.Barrier()
-    FILE_comm.Gather([my_X_new,MPI.F_COMPLEX],[X_new,MPI.F_COMPLEX])
-    if analysis=='dPCA':
-        FILE_comm.Gather([my_X_dem,MPI.F_COMPLEX],[X_dem,MPI.F_COMPLEX])
-
-    if FILE_rank==0:
-        X_new = X_new.reshape((n_proc_per_file*n_trials_per_proc,m,n_components))
-        if analysis=='dPCA':
-            X_dem = X_dem.reshape((n_proc_per_file*n_trials_per_proc,m,n))
-
-        output_path,output_filename = os.path.split(os.path.normpath(filename))
-        output_path+='/%s'%analysis
-
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
-
-        output_filename = output_filename.split('.h5')[0]
-        output_filename+='_%i_%s.h5'%(n_components,analysis)
-        output_filename = os.path.join(output_path,output_filename)
-
-        if rank==0:
-            print '\nSaving the data in %s ...'%output_filename
-
-        with h5py.File(output_filename,'w') as f:
-            f.create_dataset('X', data=X_new,compression='gzip')
-            if analysis=='dPCA':
-                f.create_dataset('Xd', data=X_dem,compression='gzip')
-            f.create_dataset('y', data=y_new,compression='gzip')
-            f.create_dataset('blocks',data=blocks_new,compression='gzip')
-            f.create_dataset('elects',data=elects,compression='gzip')
+    with h5py.File(output_filename,'w',driver='mpio',comm=FILE_comm) as f:
+        f.atomic = True
+        X_out = f.create_dataset('X',shape=(t,m,n_components),dtype=np.complex)
+        print 'here'
+        X_out[start:start+n_trials_per_proc,...] = my_X_new
+#        if analysis=='dPCA':
+#            Xd_out = f.create_dataset('Xd',shape=(t,m,n_components),dtype=np.complex)
+#            Xd_out[start:start+n_trials_per_proc]=my_X_dem
+#        if FILE_rank==0:
+#            f.create_dataset('y',data=y_new,compression='gzip')
+#            f.create_dataset('blocks',data=blocks_new,compression='gzip')
+#            f.create_dataset('elects',data=elects,compression='gzip')
 
     MAIN_comm.Barrier()
 
