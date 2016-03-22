@@ -70,12 +70,14 @@ def compute(files,subject='EC2',vsmc=True,\
         tic = MPI.Wtime()
 
         with h5py.File(filename,'r') as f:
-            X       = f['X'][:3]#.value
+            X       = f['X'][:6]#.value
             X_r     = X.real
             X_i     = X.imag
-            y       = f['y'][:3]#.value
-            blocks  = f['block'][:3]#.value
+            y       = f['y'][:6]#.value
+            blocks  = f['block'][:6]#.value
             t,m,n   = X.shape
+
+        assert X_r.dtype=='f4','X_r dtype is not f4'
 
         #split X into number of samples per process
         #X = np.array(np.split(X,n_proc_per_file))
@@ -90,8 +92,7 @@ def compute(files,subject='EC2',vsmc=True,\
         X_i = None
 
     if  FILE_rank==0:
-        print '\nRank [%i]: Data loaded in %.4f seconds.Shape of data set: %s'%(MAIN_rank,MPI.Wtime()-tic,str(X.shape))
-
+        print '\nRank [%i]: Data loaded in %.4f seconds. Shape of data set: %s'%(MAIN_rank,MPI.Wtime()-tic,str(X.shape))
 
 #    '''
 #    Load/Broadcast data
@@ -151,17 +152,20 @@ def compute(files,subject='EC2',vsmc=True,\
     m = FILE_comm.bcast(obj=m,root=0)
     n = FILE_comm.bcast(obj=n,root=0)
 
-    my_X_i = np.zeros((n_trials_per_proc,m,n),dtype='f8')
-    my_X_r = np.zeros((n_trials_per_proc,m,n),dtype='f8')
+    my_X_r = np.zeros((n_trials_per_proc,m,n),dtype='f4')
+    my_X_i = np.zeros((n_trials_per_proc,m,n),dtype='f4')
+
     FILE_comm.Barrier()
-    FILE_comm.Scatter([X_r,MPI.DOUBLE],[my_X_r,MPI.DOUBLE])
-    FILE_comm.Scatter([X_i,MPI.DOUBLE],[my_X_i,MPI.DOUBLE])
+    FILE_comm.Scatter([X_r,MPI.FLOAT],[my_X_r,MPI.FLOAT])
+    FILE_comm.Scatter([X_i,MPI.FLOAT],[my_X_i,MPI.FLOAT])
    
 
     if FILE_rank==0:
         print '\nRank [%i]: Data scattered in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic) 
 
-    my_X = my_X_r[...,elects]+1j*my_X_i[...,elects]
+    my_X = my_X_r[...,elects] + 1j*my_X_i[...,elects]
+
+    assert my_X.dtype=='c8','my_X dtype is not c8'
 
     if FILE_rank==0:
         print '\nRank [%i]: Shape of data set: %s'%(MAIN_rank,str(my_X.shape))
@@ -173,30 +177,35 @@ def compute(files,subject='EC2',vsmc=True,\
     if n_components<=0:
         n_components=my_X.shape[-1]
 
-    my_X_new = np.zeros((n_trials_per_proc,m,n_components),dtype=np.complex)
+    my_X_new = np.zeros((n_trials_per_proc,m,n_components),dtype='c8')
 
     if analysis=='dPCA':
-        my_X_dem = np.zeros((n_trials_per_proc,m,n),dtype=np.complex)
+        my_X_dem = np.zeros((n_trials_per_proc,m,n),dtype='c8')
 
     if FILE_rank==0:
         print '\nRank [%i]: Computing %s with %i components ...'%(MAIN_rank,analysis,n_components)
         tic = MPI.Wtime()
 
     for i in xrange(n_trials_per_proc):
-        try:
-            if analysis=='dPCA':
-                my_X_new[i] = computePCA(my_X[i].T,n_components=n_components,whiten=True)[0].T
-                my_X_dem[i] = (my_X[i].T*np.exp(-np.angle(my_X_new[i,:,0])*1j)).T
-            elif analysis=='cICA':
-                my_X_new[i] = cica(my_X[i].T,n_components=n_components,whiten=True,\
-                               max_iter=max_iter)[2].T
-                if FILE_rank==0:
-                    print '\nRank [%i]: cICA analysis finished successfully %i/%i!'%(MAIN_rank,(i+1),n_trials_per_proc)
-        except:
-            print '\nRank [%i]: Trial %i in batch %i could not be analyzed'%(MAIN_rank,i,new_comm_id)
+#        try:
+#            if analysis=='dPCA':
+#                my_X_new[i] = computePCA(my_X[i].T,n_components=n_components,whiten=True)[0].T
+#                my_X_dem[i] = (my_X[i].T*np.exp(-np.angle(my_X_new[i,:,0])*1j)).T
+#            elif analysis=='cICA':
+        my_X_new[i] = cica(my_X[i].T,n_components=n_components,whiten=True,\
+                           max_iter=max_iter)[2].T
+        if FILE_rank==0:
+             print '\nRank [%i]: cICA analysis finished successfully %i/%i!'%(MAIN_rank,(i+1),n_trials_per_proc)
+#        except:
+#            print '\nRank [%i]: Trial %i in batch %i could not be analyzed'%(MAIN_rank,i,new_comm_id)
 
     my_X_new_r = my_X_new.real
     my_X_new_i = my_X_new.imag
+
+    assert my_X_new_r.dtype=='f4','y_X_new_r dtype is not f4'
+
+    if FILE_rank==0:
+        print '\nRank [%i]: shape of my_X_new_r: %s'%(MAIN_rank,str(my_X_new_r.shape))
 
     if analysis=='dPCA':
         my_X_dem_r = my_X_dem.real
@@ -205,12 +214,14 @@ def compute(files,subject='EC2',vsmc=True,\
     if FILE_rank==0:
         print '\nRank [%i]: %s analysis completed in %.4f seconds'%(MAIN_rank,analysis,MPI.Wtime()-tic)
 #        X_new = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype=np.complex)
-        X_new_r = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype='f8')
-        X_new_i = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype='f8')
+
+        X_new_r = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype='f4')
+        X_new_i = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype='f4')
+
         if analysis=='dPCA':
 #            X_dem = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype=np.complex)
-            X_dem_r = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype='f8')
-            X_dem_i = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype='f8')
+            X_dem_r = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype='f4')
+            X_dem_i = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype='f4')
     else:
 #        X_new = None
         X_new_r = None
@@ -220,15 +231,18 @@ def compute(files,subject='EC2',vsmc=True,\
             X_dem_r = None
             X_dem_i = None
 
+    if FILE_rank==0:
+        print my_X_new_r.shape,X_new_r.shape,my_X_new_r.dtype,X_new_r.dtype
+
     FILE_comm.Barrier()
 #    FILE_comm.Gather([my_X_new,MPI.F_COMPLEX],[X_new,MPI.F_COMPLEX])
-    FILE_comm.Gather([my_X_new_r,MPI.DOUBLE],[X_new_r,MPI.DOUBLE])
-    FILE_comm.Gather([my_X_new_i,MPI.DOUBLE],[X_new_i,MPI.DOUBLE])
+    FILE_comm.Gather([my_X_new_r,MPI.FLOAT],[X_new_r,MPI.FLOAT])
+    FILE_comm.Gather([my_X_new_i,MPI.FLOAT],[X_new_i,MPI.FLOAT])
 
     if analysis=='dPCA':
 #        FILE_comm.Gather([my_X_dem,MPI.F_COMPLEX],[X_dem,MPI.F_COMPLEX])
-        FILE_comm.Gather([my_X_dem_r,MPI.DOUBLE],[X_dem_r,MPI.DOUBLE])
-        FILE_comm.Gather([my_X_dem_r,MPI.DOUBLE],[X_dem_r,MPI.DOUBLE])
+        FILE_comm.Gather([my_X_dem_r,MPI.FLOAT],[X_dem_r,MPI.FLOAT])
+        FILE_comm.Gather([my_X_dem_i,MPI.FLOAT],[X_dem_i,MPI.FLOAT])
         
     if FILE_rank==0:
 #        X_new = X_new.reshape((n_proc_per_file*n_trials_per_proc,m,n_components))
