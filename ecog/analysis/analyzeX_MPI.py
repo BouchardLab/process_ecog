@@ -61,49 +61,61 @@ def compute(files,subject='EC2',vsmc=True,\
     if MAIN_rank==0:
 	print '\nRank [%i]: Number of processes per file: %i'%(MAIN_rank,FILE_size)
 
-#    '''
-#    Load/Broadcast data
-#    '''
-#    if FILE_rank==0:
-#        filename = files[new_comm_id]
-#        print '\nRank [%i]: Loading file %s ...'%(MAIN_rank,filename)
-#        tic = MPI.Wtime()
-
-#        with h5py.File(filename,'r') as f:
-#            X       = f['X'].value
-#            y       = f['y'].value
-#            blocks  = f['block'].value
-#            t,m,n   = f['X'].shape
-
-#        #split X into number of samples per process
-#        X = np.array(np.split(X,n_proc_per_file))
-#        n_trials_per_proc = X.shape[1]
-#    else:
-#        n_trials_per_proc = None
-#        m = None
-#        n = None
-#    if  FILE_rank==0:
-#        print '\nRank [%i]: Data loaded in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic)
-
     '''
     Load/Broadcast data
     '''
-    filename = files[new_comm_id]
-    
     if FILE_rank==0:
+        filename = files[new_comm_id]
         print '\nRank [%i]: Loading file %s ...'%(MAIN_rank,filename)
         tic = MPI.Wtime()
 
-    with h5py.File(filename,'r') as f:
-        t,m,n   = f['X'].shape
-        n_trials_per_proc = t//n_proc_per_file
-        start = FILE_rank*n_trials_per_proc
-        my_X  = f['X'][start:start+n_trials_per_proc]
-        if FILE_rank==0:
-            y       = f['y'].value
-            blocks  = f['block'].value
+        with h5py.File(filename,'r') as f:
+            X       = f['X'][:3]#.value
+            X_r     = X.real
+            X_i     = X.imag
+            y       = f['y'][:3]#.value
+            blocks  = f['block'][:3]#.value
+            t,m,n   = X.shape
+
+        #split X into number of samples per process
+        #X = np.array(np.split(X,n_proc_per_file))
+        X_r = np.array(np.split(X_r,n_proc_per_file))
+        X_i = np.array(np.split(X_i,n_proc_per_file))
+        n_trials_per_proc = X_r.shape[1]
+    else:
+        n_trials_per_proc = None
+        m = None
+        n = None
+        X_r = None
+        X_i = None
+
     if  FILE_rank==0:
         print '\nRank [%i]: Data loaded in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic)
+        print X_r.shape
+
+#    '''
+#    Load/Broadcast data
+#    '''
+#    filename = files[new_comm_id]
+   
+#    print '\nMain rank: [%i];Main size: [%i];\tFile rank: [%i];File size: [%i]'%(MAIN_rank,MAIN_size,FILE_rank,FILE_size)
+ 
+#    if FILE_rank==0:
+#        print '\nRank [%i]: Loading file %s ...'%(MAIN_rank,filename)
+#        tic = MPI.Wtime()
+
+#    with h5py.File(filename,'r',driver='mpio',comm=FILE_comm) as f:
+#        f.atomic=True
+#        t,m,n   = f['X'].shape
+#        n_trials_per_proc = t//n_proc_per_file
+#        start = FILE_rank*n_trials_per_proc
+#        my_X  = f['X'][start:start+n_trials_per_proc]
+#        if FILE_rank==0:
+#            y       = f['y'].value
+#            blocks  = f['block'].value
+
+#    if  FILE_rank==0:
+#        print '\nRank [%i]: Data loaded in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic)
 
     '''
     Select electrodes
@@ -112,13 +124,13 @@ def compute(files,subject='EC2',vsmc=True,\
     if MAIN_rank==0:
         print '\nRank [%i]: Loading/bcasting electrode information ...'%MAIN_rank
         tic = MPI.Wtime()
-        elects = selectElectrodes(subject,np.unique(blocks),vsmc)
+        elects = selectElectrodes(subject,np.unique(blocks),vsmc).astype('int')
         n_elects = len(elects)
     else:
         n_elects = None
 
     MAIN_comm.Barrier()
-    n_elects = MAIN_comm.bcast(obj=n_elects,root=0)
+    n_elects = MAIN_comm.bcast(obj=n_elects)
     if MAIN_rank!=0:
         elects = np.zeros(n_elects,dtype='int')
 
@@ -134,20 +146,23 @@ def compute(files,subject='EC2',vsmc=True,\
        print '\nRank [%i]: Scattering data across processes ...'%MAIN_rank
        tic = MPI.Wtime()
 
-#    FILE_comm.Barrier()
-#    n_trials_per_proc = FILE_comm.bcast(obj=n_trials_per_proc,root=0)
-#    m = FILE_comm.bcast(obj=m,root=0)
-#    n = FILE_comm.bcast(obj=n,root=0)
+    FILE_comm.Barrier()
+    n_trials_per_proc = FILE_comm.bcast(obj=n_trials_per_proc,root=0)
+    m = FILE_comm.bcast(obj=m,root=0)
+    n = FILE_comm.bcast(obj=n,root=0)
 
-#    my_X = np.zeros((n_trials_per_proc,m,n),dtype=np.complex)
-#    FILE_comm.Barrier()
-#    FILE_comm.Scatter([X,MPI.F_COMPLEX],[my_X,MPI.F_COMPLEX])
+    my_X_i = np.zeros((n_trials_per_proc,m,n),dtype='f8')
+    my_X_r = np.zeros((n_trials_per_proc,m,n),dtype='f8')
+    FILE_comm.Barrier()
+    FILE_comm.Scatter([X_r,MPI.DOUBLE],[my_X_r,MPI.DOUBLE])
+    FILE_comm.Scatter([X_i,MPI.DOUBLE],[my_X_i,MPI.DOUBLE])
+   
 
-#    if FILE_rank==0:
-#        print '\nRank [%i]: Data scattered in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic) 
+    if FILE_rank==0:
+        print '\nRank [%i]: Data scattered in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic) 
 
+    my_X = my_X_r[...,elects]+1j*my_X_i[...,elects]
 
-    my_X = my_X[...,elects]
     if FILE_rank==0:
 	print '\nRank [%i]: Shape of data set: %s'%(MAIN_rank,str(my_X.shape))
 
@@ -168,89 +183,92 @@ def compute(files,subject='EC2',vsmc=True,\
         tic = MPI.Wtime()
 
     for i in xrange(n_trials_per_proc):
-#        try:
-        if analysis=='dPCA':
-            my_X_new[i] = computePCA(my_X[i].T,n_components=n_components,whiten=True)[0].T
-            my_X_dem[i] = (my_X[i].T*np.exp(-np.angle(my_X_new[i,:,0])*1j)).T
-        elif analysis=='cICA':
-            my_X_new[i] = cica(my_X[i].T,n_components=n_components,whiten=True,\
+        try:
+            if analysis=='dPCA':
+                my_X_new[i] = computePCA(my_X[i].T,n_components=n_components,whiten=True)[0].T
+                my_X_dem[i] = (my_X[i].T*np.exp(-np.angle(my_X_new[i,:,0])*1j)).T
+            elif analysis=='cICA':
+                my_X_new[i] = cica(my_X[i].T,n_components=n_components,whiten=True,\
                                max_iter=max_iter)[2].T
-            if FILE_rank==0:
-                print '\nRank [%i]: cICA analysis finished successfully %i/%i!'%(MAIN_rank,i,n_trials_per_proc)
-
-#        except:
-#            print '\nRank [%i]: Trial %i in batch %i could not be analyzed'%(MAIN_rank,i,new_comm_id)
-
-#    if FILE_rank==0:
-#        print '\nRank [%i]: %s analysis completed in %.4f seconds'%(MAIN_rank,analysis,MPI.Wtime()-tic)
-#        X_new = np.zeros((n_proc_per_file,t,m,n_components),dtype=np.complex)
-#        if analysis=='dPCA':
-#            X_dem = np.zeros((n_proc_per_file,t,m,n),dtype=np.complex)
-#    else:
-#        X_new = None
-#        if analysis=='dPCA':
-#            X_dem = None
-
-#    FILE_comm.Barrier()
-#    FILE_comm.Gather([my_X_new,MPI.F_COMPLEX],[X_new,MPI.F_COMPLEX])
-#    if analysis=='dPCA':
-#        FILE_comm.Gather([my_X_dem,MPI.F_COMPLEX],[X_dem,MPI.F_COMPLEX])
-
-#    if FILE_rank==0:
-#        X_new = X_new.reshape((n_proc_per_file*n_trials_per_proc,m,n_components))
-#        if analysis=='dPCA':
-#            X_dem = X_dem.reshape((n_proc_per_file*n_trials_per_proc,m,n))
-
-#        output_path,output_filename = os.path.split(os.path.normpath(filename))
-#        output_path+='/%s'%analysis
-
-#        if not os.path.exists(output_path):
-#            os.makedirs(output_path)
-
-#        output_filename = output_filename.split('.h5')[0]
-#        output_filename+='_%i_%s.h5'%(n_components,analysis)
-#        output_filename = os.path.join(output_path,output_filename)
-
-#        if rank==0:
-#            print '\nSaving the data in %s ...'%output_filename
-
-#        with h5py.File(output_filename,'w') as f:
-#            f.create_dataset('X', data=X_new,compression='gzip')
-#            if analysis=='dPCA':
-#                f.create_dataset('Xd', data=X_dem,compression='gzip')
-#            f.create_dataset('y', data=y_new,compression='gzip')
-#            f.create_dataset('blocks',data=blocks_new,compression='gzip')
-#            f.create_dataset('elects',data=elects,compression='gzip')
-
-
-    output_path,output_filename = os.path.split(os.path.normpath(filename))
-    output_path+='/%s'%analysis
-
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-
-    output_filename = output_filename.split('.h5')[0]
-    output_filename+='_%i_%s.h5'%(n_components,analysis)
-    output_filename = os.path.join(output_path,output_filename)
+                if FILE_rank==0:
+                    print '\nRank [%i]: cICA analysis finished successfully %i/%i!'%(MAIN_rank,(i+1),n_trials_per_proc)
+        except:
+            print '\nRank [%i]: Trial %i in batch %i could not be analyzed'%(MAIN_rank,i,new_comm_id)
 
     if FILE_rank==0:
-        print '\nRank [%i]: Saving the data in %s ...'%(MAIN_rank,output_filename)
+        print '\nRank [%i]: %s analysis completed in %.4f seconds'%(MAIN_rank,analysis,MPI.Wtime()-tic)
+        X_new = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype=np.complex)
+        if analysis=='dPCA':
+            X_dem = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype=np.complex)
+    else:
+        X_new = None
+        if analysis=='dPCA':
+            X_dem = None
 
     FILE_comm.Barrier()
-    with h5py.File(output_filename,'w',driver='mpio',comm=FILE_comm) as f:
-        f.atomic = True
-        X_out = f.create_dataset('X',shape=(t,m,n_components),dtype=np.complex)
-        print 'here'
-        X_out[start:start+n_trials_per_proc,...] = my_X_new
+    FILE_comm.Gather([my_X_new,MPI.F_COMPLEX],[X_new,MPI.F_COMPLEX])
+    if analysis=='dPCA':
+        FILE_comm.Gather([my_X_dem,MPI.F_COMPLEX],[X_dem,MPI.F_COMPLEX])
+
+    if FILE_rank==0:
+        X_new = X_new.reshape((n_proc_per_file*n_trials_per_proc,m,n_components))
+        if analysis=='dPCA':
+            X_dem = X_dem.reshape((n_proc_per_file*n_trials_per_proc,m,n))
+
+        output_path,output_filename = os.path.split(os.path.normpath(filename))
+        output_path+='/%s'%analysis
+
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+
+        output_filename = output_filename.split('.h5')[0]
+        output_filename+='_%i_%s.h5'%(n_components,analysis)
+        output_filename = os.path.join(output_path,output_filename)
+
+        if FILE_rank==0:
+            print '\nRank [%i]: Saving the data in %s ...'%(FILE_rank,output_filename)
+
+        with h5py.File(output_filename,'w') as f:
+            f.create_dataset('X', data=X_new,compression='gzip')
+            if analysis=='dPCA':
+                f.create_dataset('Xd', data=X_dem,compression='gzip')
+            f.create_dataset('y', data=y,compression='gzip')
+            f.create_dataset('blocks',data=blocks,compression='gzip')
+            f.create_dataset('elects',data=elects,compression='gzip')
+
+
+#    output_path,output_filename = os.path.split(os.path.normpath(filename))
+#    output_path+='/%s'%analysis
+
+#    if not os.path.exists(output_path):
+#        os.makedirs(output_path)
+
+#    output_filename = output_filename.split('.h5')[0]
+#    output_filename+='_%i_%s.h5'%(n_components,analysis)
+#    output_filename = os.path.join(output_path,output_filename)
+
+#    if FILE_rank==0:
+#        print '\nRank [%i]: Saving the data in %s ...'%(MAIN_rank,output_filename)
+
+#    FILE_comm.Barrier()
+#    with h5py.File(output_filename,'w',driver='mpio',comm=FILE_comm) as f:
+#        f.atomic = True
+#        X_out = f.create_dataset('X',shape=(t,m,n_components),dtype=np.complex)
+#        X_out[start:start+n_trials_per_proc,...] = my_X_new
 #        if analysis=='dPCA':
 #            Xd_out = f.create_dataset('Xd',shape=(t,m,n_components),dtype=np.complex)
 #            Xd_out[start:start+n_trials_per_proc]=my_X_dem
+#        y_out      = f.create_dataset(name='y',shape=(t,),dtype='int')
+#        blocks_out = f.create_dataset(name='blocks',shape=(t,),dtype='int')
+#        elects_out = f.create_dataset(name='elects',shape=(len(elects),),dtype='int')
 #        if FILE_rank==0:
-#            f.create_dataset('y',data=y_new,compression='gzip')
-#            f.create_dataset('blocks',data=blocks_new,compression='gzip')
-#            f.create_dataset('elects',data=elects,compression='gzip')
+#            y_out[:] = y
+#            blocks_out[:] = blocks
+#            elects_out[:] = elects
 
-    MAIN_comm.Barrier()
+#    MAIN_comm.Barrier()
+#    if MAIN_rank==0:
+        print '\nRank [%i]: Analysis complete!'%MAIN_rank
 
 if __name__ == "__main__":
     main()

@@ -83,7 +83,7 @@ def compute(args):
 
     tic = time.time()
 
-    for i in xrange(1):
+    for i in xrange(t):
         try:
             if analysis=='dPCA':
                 if i==0 and rank==0:
