@@ -130,7 +130,7 @@ def complex_FastICA(X,epsilon=.1,algorithm='parallel',\
 
                 w/=norm(w)
 
-                # Decorrelation
+                # Gram-Schmidt-like decorrelation
                 w-=W.dot(W.conj().T).dot(w)
                 w/=norm(w)
 

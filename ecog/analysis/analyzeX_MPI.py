@@ -195,24 +195,48 @@ def compute(files,subject='EC2',vsmc=True,\
         except:
             print '\nRank [%i]: Trial %i in batch %i could not be analyzed'%(MAIN_rank,i,new_comm_id)
 
+    my_X_new_r = my_X_new.real
+    my_X_new_i = my_X_new.imag
+
+    if analysis=='dPCA':
+        my_X_dem_r = my_X_dem.real
+        my_X_dem_i = my_X_dem.imag
+
     if FILE_rank==0:
         print '\nRank [%i]: %s analysis completed in %.4f seconds'%(MAIN_rank,analysis,MPI.Wtime()-tic)
-        X_new = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype=np.complex)
+#        X_new = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype=np.complex)
+        X_new_r = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype='f8')
+        X_new_i = np.zeros((n_proc_per_file,n_trials_per_proc,m,n_components),dtype='f8')
         if analysis=='dPCA':
-            X_dem = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype=np.complex)
+#            X_dem = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype=np.complex)
+            X_dem_r = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype='f8')
+            X_dem_i = np.zeros((n_proc_per_file,n_trials_per_proc,m,n),dtype='f8')
     else:
-        X_new = None
+#        X_new = None
+        X_new_r = None
+        X_new_i = None
         if analysis=='dPCA':
-            X_dem = None
+#            X_dem = None
+            X_dem_r = None
+            X_dem_i = None
 
     FILE_comm.Barrier()
-    FILE_comm.Gather([my_X_new,MPI.F_COMPLEX],[X_new,MPI.F_COMPLEX])
-    if analysis=='dPCA':
-        FILE_comm.Gather([my_X_dem,MPI.F_COMPLEX],[X_dem,MPI.F_COMPLEX])
+#    FILE_comm.Gather([my_X_new,MPI.F_COMPLEX],[X_new,MPI.F_COMPLEX])
+    FILE_comm.Gather([my_X_new_r,MPI.DOUBLE],[X_new_r,MPI.DOUBLE])
+    FILE_comm.Gather([my_X_new_i,MPI.DOUBLE],[X_new_i,MPI.DOUBLE])
 
+    if analysis=='dPCA':
+#        FILE_comm.Gather([my_X_dem,MPI.F_COMPLEX],[X_dem,MPI.F_COMPLEX])
+        FILE_comm.Gather([my_X_dem_r,MPI.DOUBLE],[X_dem_r,MPI.DOUBLE])
+        FILE_comm.Gather([my_X_dem_r,MPI.DOUBLE],[X_dem_r,MPI.DOUBLE])
+        
     if FILE_rank==0:
+#        X_new = X_new.reshape((n_proc_per_file*n_trials_per_proc,m,n_components))
+        X_new = X_new_r+1j*X_new_i
         X_new = X_new.reshape((n_proc_per_file*n_trials_per_proc,m,n_components))
+
         if analysis=='dPCA':
+            X_dem = X_dem_r+1j*X_dem_i
             X_dem = X_dem.reshape((n_proc_per_file*n_trials_per_proc,m,n))
 
         output_path,output_filename = os.path.split(os.path.normpath(filename))
