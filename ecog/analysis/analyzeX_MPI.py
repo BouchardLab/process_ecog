@@ -90,8 +90,8 @@ def compute(files,subject='EC2',vsmc=True,\
         X_i = None
 
     if  FILE_rank==0:
-        print '\nRank [%i]: Data loaded in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic)
-        print X_r.shape
+        print '\nRank [%i]: Data loaded in %.4f seconds.Shape of data set: %s'%(MAIN_rank,MPI.Wtime()-tic,str(X.shape))
+
 
 #    '''
 #    Load/Broadcast data
@@ -164,11 +164,11 @@ def compute(files,subject='EC2',vsmc=True,\
     my_X = my_X_r[...,elects]+1j*my_X_i[...,elects]
 
     if FILE_rank==0:
-	print '\nRank [%i]: Shape of data set: %s'%(MAIN_rank,str(my_X.shape))
+        print '\nRank [%i]: Shape of data set: %s'%(MAIN_rank,str(my_X.shape))
 
     _,m,n = my_X.shape
 
-    assert n_trials_per_proc==_
+    assert n_trials_per_proc==_,'Something went wrong: the number of trials per process is not correct!'
 
     if n_components<=0:
         n_components=my_X.shape[-1]
@@ -232,11 +232,11 @@ def compute(files,subject='EC2',vsmc=True,\
         
     if FILE_rank==0:
 #        X_new = X_new.reshape((n_proc_per_file*n_trials_per_proc,m,n_components))
-        X_new = X_new_r+1j*X_new_i
+        X_new = X_new_r + 1j*X_new_i
         X_new = X_new.reshape((n_proc_per_file*n_trials_per_proc,m,n_components))
 
         if analysis=='dPCA':
-            X_dem = X_dem_r+1j*X_dem_i
+            X_dem = X_dem_r + 1j*X_dem_i
             X_dem = X_dem.reshape((n_proc_per_file*n_trials_per_proc,m,n))
 
         output_path,output_filename = os.path.split(os.path.normpath(filename))
