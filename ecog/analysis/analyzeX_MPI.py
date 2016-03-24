@@ -57,7 +57,7 @@ def compute(files,subject='EC2',vsmc=True,\
     FILE_rank = FILE_comm.Get_rank()
     FILE_size = FILE_comm.Get_size()
 
-    if MAIN_rank==0:
+    if FILE_rank==0:
         print '\nRank [%i]: Number of processes per file: %i'%(MAIN_rank,FILE_size)
 
     '''
