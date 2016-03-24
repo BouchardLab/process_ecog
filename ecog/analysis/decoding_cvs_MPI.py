@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import time,pdb,os,h5py,sys
+import time,pdb,os,h5py,sys,glob
 import numpy as np
 from sklearn import svm
 from sklearn import metrics,cross_validation
@@ -10,6 +10,7 @@ from sklearn.linear_model import LogisticRegression,Perceptron
 
 #custom modules
 from kCrossVal import kCrossValy
+from utils.selectElectrodes import selectElectrodes
 
 __author__ = 'Alex Bujan'
 
@@ -21,7 +22,9 @@ def main():
     parser.add_option("-l","--labels",type="string")
     parser.add_option("-r","--part",type="string",default='none',)
     parser.add_option("-m","--model",type="string",default='svm')
+    parser.add_option("-s","--subject",type="string",default='EC2')
     parser.add_option("-e","--elect",action='store_true',dest='elect')
+    parser.add_option('-v','--vsmc',action='store_true',dest='vsmc')
 
     (options, args) = parser.parse_args()
 
@@ -30,14 +33,21 @@ def main():
     else:
         elect=False
 
+    if options.vsmc:
+        vsmc = True
+    else:
+        vsmc = False
+
     ldir = glob.glob('%s'%options.path)
 
     assert len(ldir)>0,'No files found!'
 
     run(files=ldir,labels=options.labels,part=options.part,\
-        model=options.model,electrodes=elect)
+        model=options.model,electrodes=elect,subject=options.subject,\
+        vsmc=vsmc)
 
-def run(files,labels,part='none',model='svm',electrodes=False):
+def run(files,labels,part='none',model='svm',electrodes=False,\
+        subject='EC2',vsmc=True):
 
     """
     MPI
@@ -73,6 +83,8 @@ def run(files,labels,part='none',model='svm',electrodes=False):
                 X   = np.angle(X).astype('f4')
             t,m,n   = X.shape
             y       = f['y'].value.astype('int')
+            if MAIN_rank==0:
+                blocks = f['block'].value
     else:
         t = None
         m = None
@@ -148,7 +160,7 @@ def run(files,labels,part='none',model='svm',electrodes=False):
 
     C = np.logspace(-5,2,n_hps,dtype='f8')
 
-    assert FILE_size//len(n_hps)==n_folds,'Wrong number of processes.'
+    assert FILE_size//n_hps==n_folds,'Wrong number of processes.'
 
     HP_id = FILE_rank // n_folds
     CV_id = FILE_rank %  n_folds
@@ -181,7 +193,7 @@ def run(files,labels,part='none',model='svm',electrodes=False):
     else:
         accuracy = None
 
-    my_accuracy = np.zeros(3,dtype'f4')
+    my_accuracy = np.zeros(3,dtype='f4')
 
     for i,task in enumerate(taskList):
 
