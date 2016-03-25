@@ -66,6 +66,7 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
 
     if FILE_rank==0:
         print '\nRank [%i]: Number of processes per file: %i'%(MAIN_rank,FILE_size)
+        start_time = MPI.Wtime()
 
     '''
     Load/Broadcast data
@@ -84,7 +85,7 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
             t,m,n   = X.shape
             y       = f['y'].value.astype('int')
             if MAIN_rank==0:
-                blocks = f['block'].value
+                blocks = f['blocks'].value
     else:
         t = None
         m = None
@@ -144,7 +145,34 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
     if electrodes:
         X = X[...,elects]
 
+    '''
+    Labels
+    '''
+   
+    labels   = h5py.File(labels,'r')
+    taskList = labels['indices'].keys()
+
+    tokens = np.array(['baa', 'bee', 'boo', 'daa', 'dee', 'doo', 'faa', 'fee', 'foo',
+                       'gaa', 'gee', 'goo', 'haa', 'hee', 'hoo', 'kaa', 'kee', 'koo',
+                       'laa', 'lee', 'loo', 'maa', 'mee', 'moo', 'naa', 'nee', 'noo',
+                       'paa', 'pee', 'poo', 'raa', 'ree', 'roo', 'saa', 'see', 'shaa',
+                       'shee', 'shoo', 'soo', 'taa', 'tee', 'thaa', 'thee', 'thoo', 'too',
+                       'vaa', 'vee', 'voo', 'waa', 'wee', 'woo', 'yaa', 'yee', 'yoo',
+                       'zaa', 'zee', 'zoo'], 
+                        dtype='|S4')
+
+    dropit = lambda x : tokens[x] in labels['labels/utterance'].value
+
+    dropouts = np.array(map(dropit,y))
+
+    X = X[dropouts,...]
+    y = y[dropouts]
+
     t,m,n = X.shape
+
+    rename = lambda x : np.where(tokens[x]==labels['labels/utterance'].value)[0][0]
+
+    y = np.array(map(rename,y)).astype('int')
 
     X = X.reshape((t,m*n))
 
@@ -168,45 +196,29 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
     my_C = C[HP_id]
     my_seed = np.random.randint(9999,size=n_folds)[CV_id]
 
-    if FILE_rank==0:
-        print '\nRank [%i]: Getting train,validation and test ids ...'%(MAIN_rank)
-
-    train_ids,val_ids,test_ids = kCrossValy(y,percent=.8,\
-                                            n_folds=n_folds,seed=my_seed)
-
-    if FILE_rank==0:
-        print '\nRank [%i]: Getting task list ...'%(MAIN_rank)
-
-    '''
-    Labels
-    '''
-
-    labels   = h5py.File(labels,'r')
-    taskList = labels['indices'].keys()
-
     '''
     Containers for storing results
     '''
 
-    if FILE_rank==0:
-        accuracy = np.zeros((len(taskList),FILE_size,3),dtype='f4')
-    else:
-        accuracy = None
-
-    my_accuracy = np.zeros(3,dtype='f4')
-
     for i,task in enumerate(taskList):
+
+        accuracy = np.zeros((FILE_size,3),dtype='f4')
+
+        my_accuracy = np.zeros(3,dtype='f4')
 
         '''
         Map labels according to task
         '''
+        y_map = map_labels(y,labels,task)
 
-        y_map = map_labels(y-1,labels,task)
+        if FILE_rank==0:
+            print '\nRank [%i]: Getting train,validation and test ids ...'%(MAIN_rank)
+
+        y_map = map_labels(y,labels,task)
 
         """
         Initialize the classifier
         """
-
         if model=='svm':
             clf = svm.LinearSVC(C=my_C)
         elif model=='logistic':
@@ -221,15 +233,14 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
         """
         Training
         """
-
         if FILE_rank==0:
-            print '\nRank [%i]: Training %s classifier with C=%.4f on task [%s] ...'%(model,my_C,task)
+            print '\nRank [%i]: Training %s classifier with C=%.4f on task [%s] ...'%(MAIN_rank,model,my_C,task)
             tic = MPI.Wtime()
 
         clf.fit(X[train_ids[CV_id],:],y_map[train_ids[CV_id]])
 
         if FILE_rank==0:
-            print '\tTraining completed in %.4f sec'%(MPI.Wtime(-tic))
+            print '\nRank [%i]: Training completed in %.4f sec'%(MAIN_rank,MPI.Wtime()-tic)
 
         prediction_train = clf.predict(X[train_ids[CV_id],:])
         my_accuracy[0] = metrics.accuracy_score(y_map[train_ids[CV_id]],\
@@ -238,7 +249,6 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
         """
         Validation
         """
-
         prediction_val  = clf.predict(X[val_ids[CV_id],:])
         my_accuracy[1] = metrics.accuracy_score(y_map[val_ids[CV_id]],\
                                                 prediction_val)
@@ -246,7 +256,6 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
         """
         Test
         """
-
         prediction_test  = clf.predict(X[test_ids[CV_id],:])
         my_accuracy[2]    = metrics.accuracy_score(y_map[test_ids[CV_id]],\
                                                   prediction_test)
@@ -254,62 +263,55 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
         """
         Gather results
         """
-
         FILE_comm.Barrier()
-        FILE_comm.Gather([accuracy[i],MPI.DOUBLE],[my_accuracy,MPI.DOUBLE])
+        FILE_comm.Gather([my_accuracy,MPI.FLOAT],[accuracy,MPI.FLOAT])
 
         """
         Model selection
         """
-
-        if FILE_rank==0:
-            results_val = np.array(np.split(accuracy[i,:,1],n_hps)).mean(0)
-            best_C = np.max(results_val)
-            if len(best_C)>1:
-                best_C = best_C[0]
-            selection = (results_val==best_C)*1
-        else:
-            selection = np.zeros(n_hps,dtype='int')
-
-        FILE_comm.Barrier()
-        FILE_comm.Bcast([selection.astype('int'),MPI.INT])
-
-        '''
-        Create new containers
-        '''
-
         n_labels = len(np.unique(y_map))
 
-        if FILE_comm==0:
-            CM = np.zeros((n_folds,n_labels**2),dtype='f4')
-            W  = np.zeros((n_folds,n*m),dtype='f4')
-        else:
-            CM = None
-            W  = None
+        if FILE_rank==0:
+            results_val = np.array(np.split(accuracy[:,1],n_hps)).mean(1)
+            best_C = np.max(results_val)
+            try:
+                selection = np.where(results_val==best_C)[0][0]
+            except:
+                selection = np.where(results_val==best_C[0])[0][0]
+
+            '''
+            Create new containers
+            '''
+            CM = np.zeros((n_folds,n_labels,n_labels),dtype='f4')
+            W  = np.zeros((n_folds,n_labels,m*n),dtype='f4')
 
         '''
         RMA to communicate the best weights and confusion matrix
         '''
 
-        win_CM = MPI.Win.Create(CM,comm=FILE_comm)
-        win_W  = MPI.Win.Create(W,comm=FILE_comm)
+        cm = metrics.confusion_matrix(y_map[test_ids[CV_id]],\
+                                prediction_test).astype('f4')
 
-        win.Fence()
+        w = clf.coef_.reshape((n_labels,m*n)).astype('f4')
 
-        if selection[HP_id]:
+        win_cm = MPI.Win.Create(cm,comm=FILE_comm)
+        win_w  = MPI.Win.Create(w,comm=FILE_comm)
 
-            cm = metrics.confusion_matrix(y_map[test_ids[CV_id]],\
-                                    prediction_test).ravel().astype('f4')
-            win_CM.Put(origin=cm,target_rank=0,target=CV_id*(n_labels**2)*4)
+        win_cm.Fence()
+        win_w.Fence()
 
-            w = clf.coef_.ravel().astype('f4')
-            win_W.Put(origin=w,target_rank=0,target=CV_id*n*m*4)
+        if FILE_rank==0:
+            for k in xrange(n_folds):
+                win_cm.Get(origin=CM[k],target_rank=(selection*n_folds)+k,target=0)
+                win_w.Get(origin=W[k],target_rank=(selection*n_folds)+k,target=0)
 
-        win.Fence()
+        win_cm.Fence()
+        win_w.Fence()
+
+        win_cm.Free()
+        win_w.Free()
 
         FILE_comm.Barrier()
-
-        win.Free()
 
         if FILE_rank==0:
 
@@ -324,23 +326,25 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
                 output_filename+='_%s_%s.h5'%(part,model)
                 output_filename = os.path.join(output_path,output_filename)
 
-                print '\nRank [%i]: Saving the data in %s ...'%(MAIN_rank,output_filename)
-
-                f = h5py.File(output_filename,'r+')
+                f = h5py.File(output_filename,'w')
                 f.attrs['model'] = model
                 f.attrs['param'] = C
 
+            print '\nRank [%i]: Saving %s data to %s ...'%(MAIN_rank,task,output_filename)
+            tic = MPI.Wtime()
             g = f.create_group(task)
-            g.create_dataset(name='accuracy',data=accuracy[i],compression='gzip')
-            g.create_dataset(name='CM',data=CM.reshape((n_folds,n_labels,n_labels)),\
-                            compression='gzip')
-            g.create_dataset(name='coeffs',data=weights.reshape(n,m),compression='gzip')
+            g.create_dataset(name='accuracy',data=accuracy,compression='gzip')
+            g.create_dataset(name='CM',data=CM,compression='gzip')
+            g.create_dataset(name='coeffs',data=W.reshape((n_folds,n_labels,m,n)),\
+                             compression='gzip')
+            print '\nRank [%i]: Task %s saved in %.4f seconds!'%(MAIN_rank,task,\
+                                                                MPI.Wtime()-tic)
 
         FILE_comm.Barrier()
 
     if FILE_rank==0:
         f.close()
-        print '\nRank [%i]: Analysis complete!'%MAIN_rank
+        print '\nRank [%i]: Analysis was completed in %.4f seconds!'%(MAIN_rank,MPI.Wtime()-start_time)
 
 def map_labels(inLabels,labels,lutKey):
     outLabels = np.zeros_like(inLabels)
