@@ -389,6 +389,7 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
         output_filename+='_%s_%s.h5'%(part,model)
         output_filename = os.path.join(output_path,output_filename)
 
+        STORE_comm.Barrier()
         f = h5py.File(output_filename,'w',driver='mpio',comm=STORE_comm)
 
         f.attrs['model'] = model
@@ -402,6 +403,7 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
         n_labels_ = STORE_comm.allgather(sendobj=n_labels,recvobj=n_labels_)
 
         for i,t in enumerate(taskList):
+            STORE_comm.Barrier()
             g = f.create_group(t)
             g.create_dataset(name='accuracy',shape=(TASK_size,3),dtype='f4')
             g.create_dataset(name='CM',shape=(n_folds,n_labels_[i],n_labels),\
@@ -416,6 +418,9 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
         if FILE_rank==0:
             print '\nRank [%i]: Task %s saved in %.4f seconds!'%(MAIN_rank,task,\
                                                                 MPI.Wtime()-tic)
+        STORE_comm.Barrier()
+        f.close()
+
 
     FILE_comm.Barrier()
 
@@ -424,40 +429,30 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
         print '\nRank [%i]: Analysis was completed in %.4f seconds!'%(MAIN_rank,MPI.Wtime()-start_time)
 
 def map_labels(inLabels,task):
-
     outLabels = np.zeros_like(inLabels)
-
-    syllable_indices = np.array([ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-       17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
-       34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47])
-
+    syllable_indices = np.array([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,
+                                17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,
+                                34,35,36,37,38,39,40,41,42,43,44,45,46,47])
     if task=='consonant':
-        task_indices = np.array([2, 2, 2, 1, 1, 1, 2, 2, 2, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 1, 1,
-       1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 0, 0, 0, 1,
-       1, 1])
-
+        task_indices = np.array([2,2,2,1,1,1,2,2,2,0,0,0,0,0,0,1,1,1,2,2,2,1,1,
+                                 1,2,2,2,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,0,0,0,1,
+                                 1,1])
     elif task=='phonetic_consonant':
-        task_indices = np.array([ 0,  0,  0,  1,  1,  1,  2,  2,  2,  3,  3,  3,  4,  4,  4,  5,  5,
-        5,  6,  6,  6,  7,  7,  7,  8,  8,  8,  9,  9,  9, 10, 10, 10, 11,
-       11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15])
-
+        task_indices = np.array([0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,
+                                 5,6,6,6,7,7,7,8,8,8,9,9,9,10,10,10,11,
+                                 11,11,12,12,12,13,13,13,14,14,14,15,15,15])
     elif task=='place_manner':
-        task_indices = np.array([0, 0, 0, 5, 5, 5, 2, 2, 2, 3, 3, 3, 3, 3, 3, 6, 6, 6, 1, 1, 1, 6, 6,
-       6, 0, 0, 0, 4, 4, 4, 4, 4, 4, 5, 5, 5, 2, 2, 2, 1, 1, 1, 3, 3, 3, 4,
-       4, 4])
-
+        task_indices = np.array([0,0,0,5,5,5,2,2,2,3,3,3,3,3,3,6,6,6,1,1,1,6,6,
+                                 6,0,0,0,4,4,4,4,4,4,5,5,5,2,2,2,1,1,1,3,3,3,4,
+                                 4,4])
     elif task=='utterance':
         task_indices = syllable_indices
-
     elif task=='vowel':
-        task_indices = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1,
-       2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0,
-       1, 2])
-    
+        task_indices = np.array([0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,
+                                 2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,
+                                 1,2])
     f = lambda label :task_indices[np.where(syllable_indices==label)][0]
-
     outLabels = map(f,inLabels)
-
     return np.asarray(outLabels)
 
 if __name__=='__main__':
