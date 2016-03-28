@@ -365,19 +365,21 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
     if TASK_rank==0:
         print '\nRank [%i]: Task %s ready for storage ...'%(MAIN_rank,task)
 
-    FILE_comm.Barrier()
+#    FILE_comm.Barrier()
 
-    '''
-    Create a group to write the results
-    '''
+#    '''
+#    Create a group to write the results
+#    '''
 
-    store_ids = np.arange(0,FILE_size,n_hps*n_folds).tolist()
-    store_grp = FILE_comm.Get_group().Incl(store_ids)
-    STORE_comm = FILE_comm.Create(store_grp)
+#    store_ids = np.arange(0,FILE_size,n_hps*n_folds).tolist()
+#    store_grp = FILE_comm.Get_group().Incl(store_ids)
+#    STORE_comm = FILE_comm.Create(store_grp)
 
-    FILE_comm.Barrier()
+#    FILE_comm.Barrier()
 
-    if FILE_rank in store_ids:
+#    if FILE_rank in store_ids:
+
+    if TASK_rank==0:
 
         output_path,output_filename = os.path.split(os.path.normpath(filename))
         output_path+='/%s'%model
@@ -386,46 +388,52 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
             os.makedirs(output_path)
 
         output_filename = output_filename.split('.h5')[0]
-        output_filename+='_%s_%s.h5'%(part,model)
+        output_filename+='_%s_%s_%s.h5'%(part,model,task)
         output_filename = os.path.join(output_path,output_filename)
 
-        STORE_comm.Barrier()
-        f = h5py.File(output_filename,'w',driver='mpio',comm=STORE_comm)
+#        STORE_comm.Barrier()
+#        f = h5py.File(output_filename,'w',driver='mpio',comm=STORE_comm)
 
-        f.attrs['model'] = model
-        f.attrs['param'] = C
-
-        if FILE_rank==0:
+        if TASK_rank==0:
             print '\nRank [%i]: Saving %s data to %s ...'%(MAIN_rank,task,output_filename)
             tic = MPI.Wtime()
 
-        n_labels_ = np.zeros(STORE_comm.size,dtype='int')
-        n_labels_ = STORE_comm.allgather(sendobj=n_labels,recvobj=n_labels_)
+        with h5py.File(output_filename,'w') as f:
 
-        for i,t in enumerate(taskList):
-            STORE_comm.Barrier()
-            g = f.create_group(t)
-            g.create_dataset(name='accuracy',shape=(TASK_size,3),dtype='f4')
-            g.create_dataset(name='CM',shape=(n_folds,n_labels_[i],n_labels),\
-                             dtype='f4')
-            g.create_dataset(name='coeffs',shape =(n_folds,n_labels_[i],m,n),\
-                             dtype='f4')
-            if task==t:
-                g['accuracy'][:] = accuracy
-                g['CM'][:] = CM
-                g['coeffs'][:] = W.reshape((n_folds,n_labels,m,n)).astype('f4')
+            f.attrs['model'] = model
+            f.attrs['param'] = C
 
-        if FILE_rank==0:
+
+#        n_labels_ = np.zeros(STORE_comm.size,dtype='int')
+#        n_labels_ = STORE_comm.allgather(sendobj=n_labels,recvobj=n_labels_)
+
+#        for i,t in enumerate(taskList):
+#            STORE_comm.Barrier()
+#            g = f.create_group(t)
+#            g.create_dataset(name='accuracy',shape=(TASK_size,3),dtype='f4')
+#            g.create_dataset(name='CM',shape=(n_folds,n_labels_[i],n_labels),\
+#                             dtype='f4')
+#            g.create_dataset(name='coeffs',shape =(n_folds,n_labels_[i],m,n),\
+#                             dtype='f4')
+#            if task==t:
+#                g['accuracy'][:] = accuracy
+#                g['CM'][:] = CM
+#                g['coeffs'][:] = W.reshape((n_folds,n_labels,m,n)).astype('f4')
+
+            f.create_dataset(name='accuracy',data=accuracy,compression='gzip')
+            f.create_dataset(name='CM',data=CM,compression='gzip')
+            f.create_dataset(name='coeffs',data =W.reshape((n_folds,n_labels,m,n)),\
+                             compression='gzip')
+
+        if TASK_rank==0:
             print '\nRank [%i]: Task %s saved in %.4f seconds!'%(MAIN_rank,task,\
                                                                 MPI.Wtime()-tic)
-        STORE_comm.Barrier()
-        f.close()
-
+#        STORE_comm.Barrier()
+#        f.close()
 
     FILE_comm.Barrier()
 
     if FILE_rank==0:
-        f.close()
         print '\nRank [%i]: Analysis was completed in %.4f seconds!'%(MAIN_rank,MPI.Wtime()-start_time)
 
 def map_labels(inLabels,task):
