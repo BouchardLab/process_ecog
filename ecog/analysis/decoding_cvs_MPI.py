@@ -22,6 +22,7 @@ def main():
     parser.add_option("-l","--labels",type="string")
     parser.add_option("-r","--part",type="string",default='none',)
     parser.add_option("-m","--model",type="string",default='svm')
+    parser.add_option("-n","--n_tasks",type="int",default=5)
     parser.add_option("-s","--subject",type="string",default='EC2')
     parser.add_option("-e","--elect",action='store_true',dest='elect')
     parser.add_option('-v','--vsmc',action='store_true',dest='vsmc')
@@ -44,10 +45,10 @@ def main():
 
     run(files=ldir,labels=options.labels,part=options.part,\
         model=options.model,electrodes=elect,subject=options.subject,\
-        vsmc=vsmc)
+        vsmc=vsmc,n_tasks=options.n_tasks)
 
 def run(files,labels,part='none',model='svm',electrodes=False,\
-        subject='EC2',vsmc=True):
+        subject='EC2',vsmc=True,n_tasks=5):
 
     """
     MPI
@@ -58,14 +59,23 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
     MAIN_rank = MAIN_comm.Get_rank()
 
     n_proc_per_file = MAIN_size//len(files)
-    new_comm_id = MAIN_rank//n_proc_per_file
+    new_comm_id1 = MAIN_rank//n_proc_per_file
 
-    FILE_comm = MAIN_comm.Split(new_comm_id)
+    FILE_comm = MAIN_comm.Split(new_comm_id1)
     FILE_rank = FILE_comm.Get_rank()
     FILE_size = FILE_comm.Get_size()
 
-    if FILE_rank==0:
-        print '\nRank [%i]: Number of processes per file: %i'%(MAIN_rank,FILE_size)
+    n_proc_per_task = FILE_size//n_tasks
+    new_comm_id2 = FILE_rank//n_proc_per_task
+
+    TASK_comm = FILE_comm.Split(new_comm_id2)
+    TASK_rank = TASK_comm.Get_rank()
+    TASK_size = TASK_comm.Get_size()
+
+    if TASK_rank==0:
+        print '\nRank [%i]:'%MAIN_rank
+        print '\n\t- Number of processes per file: %i'%FILE_size
+        print '\n\t- Number of processes per task: %i'%TASK_size
         start_time = MPI.Wtime()
 
     '''
@@ -73,7 +83,7 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
     '''
 
     if FILE_rank==0:
-        filename = files[new_comm_id]
+        filename = files[new_comm_id1]
         print '\nRank [%i]: Loading file %s ...'%(MAIN_rank,filename)
         tic = MPI.Wtime()
         with h5py.File(filename,'r') as f:
@@ -140,7 +150,7 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
     FILE_comm.Bcast([y,MPI.INT])
 
     if FILE_rank==0:
-        print '\nRank [%i]: Data scattered in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic) 
+        print '\nRank [%i]: Data scattered in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic)
 
     if electrodes:
         X = X[...,elects]
@@ -148,9 +158,16 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
     '''
     Labels
     '''
-   
+
+    if FILE_rank==0:
+       print '\nRank [%i]: Reading label information ...'%MAIN_rank
+       tic = MPI.Wtime()
+
     labels   = h5py.File(labels,'r')
     taskList = labels['indices'].keys()
+
+    if FILE_rank==0:
+        print '\nRank [%i]: Label info read in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic)
 
     tokens = np.array(['baa', 'bee', 'boo', 'daa', 'dee', 'doo', 'faa', 'fee', 'foo',
                        'gaa', 'gee', 'goo', 'haa', 'hee', 'hoo', 'kaa', 'kee', 'koo',
@@ -188,10 +205,10 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
 
     C = np.logspace(-5,2,n_hps,dtype='f8')
 
-    assert FILE_size//n_hps==n_folds,'Wrong number of processes.'
+    assert TASK_size//n_hps==n_folds,'Wrong number of processes.'
 
-    HP_id = FILE_rank // n_folds
-    CV_id = FILE_rank %  n_folds
+    HP_id = TASK_rank // n_folds
+    CV_id = TASK_rank %  n_folds
 
     my_C = C[HP_id]
     my_seed = np.random.randint(9999,size=n_folds)[CV_id]
@@ -200,147 +217,195 @@ def run(files,labels,part='none',model='svm',electrodes=False,\
     Containers for storing results
     '''
 
-    for i,task in enumerate(taskList):
+    task = taskList[new_comm_id2]
 
-        accuracy = np.zeros((FILE_size,3),dtype='f4')
+    my_accuracy = np.zeros(3,dtype='f4')
 
-        my_accuracy = np.zeros(3,dtype='f4')
+    accuracy = np.zeros((TASK_size,3),dtype='f4')
+
+    '''
+    Map labels according to task
+    '''
+
+    if FILE_rank==0:
+       print '\nRank [%i]: Mapping labels to task ...'%MAIN_rank
+       tic = MPI.Wtime()
+
+    y_map = map_labels(y,labels,task)
+
+    if FILE_rank==0:
+        print '\nRank [%i]: Labels mapped in %.4f seconds.'%(MAIN_rank,MPI.Wtime()-tic)
+
+    if FILE_rank==0:
+        print '\nRank [%i]: Getting train,validation and test ids ...'%(MAIN_rank)
+
+    train_ids,val_ids,test_ids = kCrossValy(y_map,percent=.8,\
+                                            n_folds=n_folds,seed=my_seed)
+
+    if FILE_rank==0:
+        print '\nRank [%i]: Getting task list ...'%(MAIN_rank)
+
+    """
+    Initialize the classifier
+    """
+    if model=='svm':
+        clf = svm.LinearSVC(C=my_C)
+    elif model=='logistic':
+        clf = LogisticRegression(C=my_C)
+    elif model=='perceptron':
+        clf = Perceptron(penalty='l1',alpha=my_C)
+    elif model=='simple_perceptron':
+        clf = Perceptron()
+    elif model=='svm_l1':
+        clf = svm.LinearSVC(C=my_C,penalty='l1',dual=False)
+
+    """
+    Training
+    """
+    if TASK_rank==0:
+        print '\nRank [%i]: Training %s classifier with C=%.4f on task [%s] ...'%(MAIN_rank,model,my_C,task)
+        tic = MPI.Wtime()
+
+    clf.fit(X[train_ids[CV_id],:],y_map[train_ids[CV_id]])
+
+    if TASK_rank==0:
+        print '\nRank [%i]: Training on task %s completed in %.4f sec'%(MAIN_rank,task,MPI.Wtime()-tic)
+
+    prediction_train = clf.predict(X[train_ids[CV_id],:])
+    my_accuracy[0] = metrics.accuracy_score(y_map[train_ids[CV_id]],\
+                                            prediction_train)
+
+    """
+    Validation
+    """
+    prediction_val  = clf.predict(X[val_ids[CV_id],:])
+    my_accuracy[1] = metrics.accuracy_score(y_map[val_ids[CV_id]],\
+                                            prediction_val)
+
+    """
+    Test
+    """
+    prediction_test  = clf.predict(X[test_ids[CV_id],:])
+    my_accuracy[2]    = metrics.accuracy_score(y_map[test_ids[CV_id]],\
+                                              prediction_test)
+
+
+    """
+    Gather results
+    """
+
+    if TASK_rank==0:
+        print '\nRank [%i]: Gathering results for task %s...'%(MAIN_rank,task)
+        print '\n\t- Shape of my_accuracy: %s'%str(my_accuracy.shape)
+        print '\n\t- Shape of accuracy: %s'%str(accuracy.shape)
+
+    if task=='utterance':
+        print my_accuracy
+
+    TASK_comm.Barrier()
+    TASK_comm.Gather([my_accuracy,MPI.FLOAT],[accuracy,MPI.FLOAT])
+
+    """
+    Model selection
+    """
+    n_labels = len(np.unique(y_map))
+
+    if TASK_rank==0:
+        results_val = np.array(np.split(accuracy[:,1],n_hps)).mean(1)
+        best_C = np.max(results_val)
+        try:
+            selection = np.where(results_val==best_C)[0][0]
+        except:
+            selection = np.where(results_val==best_C[0])[0][0]
 
         '''
-        Map labels according to task
+        Create new containers
         '''
-        y_map = map_labels(y,labels,task)
+        CM = np.zeros((n_folds,n_labels,n_labels),dtype='f4')
+        W  = np.zeros((n_folds,n_labels,m*n),dtype='f4')
+
+    '''
+    RMA to communicate the best weights and confusion matrix
+    '''
+
+    cm = metrics.confusion_matrix(y_map[test_ids[CV_id]],\
+                            prediction_test).astype('f4')
+
+    w = clf.coef_.reshape((n_labels,m*n)).astype('f4')
+
+    win_cm = MPI.Win.Create(cm,comm=TASK_comm)
+    win_w  = MPI.Win.Create(w,comm=TASK_comm)
+
+    win_cm.Fence()
+    win_w.Fence()
+
+    if TASK_rank==0:
+        for k in xrange(n_folds):
+            win_cm.Get(origin=CM[k],target_rank=(selection*n_folds)+k,target=0)
+            win_w.Get(origin=W[k],target_rank=(selection*n_folds)+k,target=0)
+
+    win_cm.Fence()
+    win_w.Fence()
+
+    win_cm.Free()
+    win_w.Free()
+
+    if TASK_rank==0:
+        print '\nRank [%i]: Task %s ready for storage ...'%(MAIN_rank,task)
+
+    FILE_comm.Barrier()
+
+    '''
+    Create a group to write the results
+    '''
+
+    store_ids = np.arange(0,FILE_size,n_hps*n_folds).tolist()
+    store_grp = FILE_comm.Get_group().Incl(store_ids)
+    STORE_comm = FILE_comm.Create(store_grp)
+
+    FILE_comm.Barrier()
+
+    if FILE_rank in store_ids:
+
+        output_path,output_filename = os.path.split(os.path.normpath(filename))
+        output_path+='/%s'%model
+
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+
+        output_filename = output_filename.split('.h5')[0]
+        output_filename+='_%s_%s.h5'%(part,model)
+        output_filename = os.path.join(output_path,output_filename)
+
+        f = h5py.File(output_filename,'w',driver='mpio',comm=STORE_comm)
+
+        f.attrs['model'] = model
+        f.attrs['param'] = C
 
         if FILE_rank==0:
-            print '\nRank [%i]: Getting train,validation and test ids ...'%(MAIN_rank)
-
-        y_map = map_labels(y,labels,task)
-
-        """
-        Initialize the classifier
-        """
-        if model=='svm':
-            clf = svm.LinearSVC(C=my_C)
-        elif model=='logistic':
-            clf = LogisticRegression(C=my_C)
-        elif model=='perceptron':
-            clf = Perceptron(penalty='l1',alpha=my_C)
-        elif model=='simple_perceptron':
-            clf = Perceptron()
-        elif model=='svm_l1':
-            clf = svm.LinearSVC(C=my_C,penalty='l1',dual=False)
-
-        """
-        Training
-        """
-        if FILE_rank==0:
-            print '\nRank [%i]: Training %s classifier with C=%.4f on task [%s] ...'%(MAIN_rank,model,my_C,task)
-            tic = MPI.Wtime()
-
-        clf.fit(X[train_ids[CV_id],:],y_map[train_ids[CV_id]])
-
-        if FILE_rank==0:
-            print '\nRank [%i]: Training completed in %.4f sec'%(MAIN_rank,MPI.Wtime()-tic)
-
-        prediction_train = clf.predict(X[train_ids[CV_id],:])
-        my_accuracy[0] = metrics.accuracy_score(y_map[train_ids[CV_id]],\
-                                                prediction_train)
-
-        """
-        Validation
-        """
-        prediction_val  = clf.predict(X[val_ids[CV_id],:])
-        my_accuracy[1] = metrics.accuracy_score(y_map[val_ids[CV_id]],\
-                                                prediction_val)
-
-        """
-        Test
-        """
-        prediction_test  = clf.predict(X[test_ids[CV_id],:])
-        my_accuracy[2]    = metrics.accuracy_score(y_map[test_ids[CV_id]],\
-                                                  prediction_test)
-
-        """
-        Gather results
-        """
-        FILE_comm.Barrier()
-        FILE_comm.Gather([my_accuracy,MPI.FLOAT],[accuracy,MPI.FLOAT])
-
-        """
-        Model selection
-        """
-        n_labels = len(np.unique(y_map))
-
-        if FILE_rank==0:
-            results_val = np.array(np.split(accuracy[:,1],n_hps)).mean(1)
-            best_C = np.max(results_val)
-            try:
-                selection = np.where(results_val==best_C)[0][0]
-            except:
-                selection = np.where(results_val==best_C[0])[0][0]
-
-            '''
-            Create new containers
-            '''
-            CM = np.zeros((n_folds,n_labels,n_labels),dtype='f4')
-            W  = np.zeros((n_folds,n_labels,m*n),dtype='f4')
-
-        '''
-        RMA to communicate the best weights and confusion matrix
-        '''
-
-        cm = metrics.confusion_matrix(y_map[test_ids[CV_id]],\
-                                prediction_test).astype('f4')
-
-        w = clf.coef_.reshape((n_labels,m*n)).astype('f4')
-
-        win_cm = MPI.Win.Create(cm,comm=FILE_comm)
-        win_w  = MPI.Win.Create(w,comm=FILE_comm)
-
-        win_cm.Fence()
-        win_w.Fence()
-
-        if FILE_rank==0:
-            for k in xrange(n_folds):
-                win_cm.Get(origin=CM[k],target_rank=(selection*n_folds)+k,target=0)
-                win_w.Get(origin=W[k],target_rank=(selection*n_folds)+k,target=0)
-
-        win_cm.Fence()
-        win_w.Fence()
-
-        win_cm.Free()
-        win_w.Free()
-
-        FILE_comm.Barrier()
-
-        if FILE_rank==0:
-
-            if i==0:
-                output_path,output_filename = os.path.split(os.path.normpath(filename))
-                output_path+='/%s'%model
-
-                if not os.path.exists(output_path):
-                    os.makedirs(output_path)
-
-                output_filename = output_filename.split('.h5')[0]
-                output_filename+='_%s_%s.h5'%(part,model)
-                output_filename = os.path.join(output_path,output_filename)
-
-                f = h5py.File(output_filename,'w')
-                f.attrs['model'] = model
-                f.attrs['param'] = C
-
             print '\nRank [%i]: Saving %s data to %s ...'%(MAIN_rank,task,output_filename)
             tic = MPI.Wtime()
-            g = f.create_group(task)
-            g.create_dataset(name='accuracy',data=accuracy,compression='gzip')
-            g.create_dataset(name='CM',data=CM,compression='gzip')
-            g.create_dataset(name='coeffs',data=W.reshape((n_folds,n_labels,m,n)),\
-                             compression='gzip')
+
+        n_labels_ = np.zeros(STORE_comm.size,dtype='int')
+        n_labels_ = STORE_comm.allgather(sendobj=n_labels,recvobj=n_labels_)
+
+        for i,t in enumerate(taskList):
+            g = f.create_group(t)
+            g.create_dataset(name='accuracy',shape=(TASK_size,3),dtype='f4')
+            g.create_dataset(name='CM',shape=(n_folds,n_labels_[i],n_labels),\
+                             dtype='f4')
+            g.create_dataset(name='coeffs',shape =(n_folds,n_labels_[i],m,n),\
+                             dtype='f4')
+            if task==t:
+                g['accuracy'][:] = accuracy
+                g['CM'][:] = CM
+                g['coeffs'][:] = W.reshape((n_folds,n_labels,m,n)).astype('f4')
+
+        if FILE_rank==0:
             print '\nRank [%i]: Task %s saved in %.4f seconds!'%(MAIN_rank,task,\
                                                                 MPI.Wtime()-tic)
 
-        FILE_comm.Barrier()
+    FILE_comm.Barrier()
 
     if FILE_rank==0:
         f.close()
