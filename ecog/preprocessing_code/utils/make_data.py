@@ -10,7 +10,7 @@ from scipy.io import loadmat
 from scikits.samplerate import resample
 
 import HTK, transcripts, utils
-
+import .HTK_hilb
 
 def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
               all_event_times=None):
@@ -79,8 +79,51 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
 
         return D
 
+
+    def AS():
+        bad_electrodes = load_bad_electrodes(blockpath) -1
+        bad_times = load_bad_times(blockpath)
+        s, fs = load_AS(blockpath)
+
+        if zscore == 'whole':
+            s = stats.zscore(s, axis=1)
+        elif zscore == 'data':
+            tt_data = np.arange(s.shape[1]) / fs
+            data_start = all_event_times.min() + align_window[0]
+            data_stop = all_event_times.max() + align_window[1]
+            data_time = utils.isin(tt_data, np.array([data_start, data_stop]))
+            for bt in bad_times:
+                data_time = data_time & ~utils.isin(tt_data, bt)
+            data = s[:, data_time]
+            means = data.mean(axis=1, keepdims=True)
+            stds = data.std(axis=1, keepdims=True)
+            s = (s - means)/stds
+        elif zscore == 'events':
+            tt_data = np.arange(s.shape[1]) / fs
+            data_time = np.zeros_like(tt_data).astype(bool)
+            for et in all_event_times:
+                data_time = data_time | utils.isin(tt_data, et + align_window)
+            for bt in bad_times:
+                data_time = data_time & ~utils.isin(tt_data, bt)
+            data = s[:, data_time]
+            means = data.mean(axis=1, keepdims=True)
+            stds = data.std(axis=1, keepdims=True)
+            s = (s - means) / stds
+        elif ((zscore is None) or (zscore.lower() == 'none')):
+            pass
+        else:
+            raise ValueError('zscore type {} not recognized.'.format(zscore))
+
+
+        D = makeD(s, fs, event_times, align_window,
+                  bad_times=bad_times, bad_electrodes=bad_electrodes)
+
+        return D
+
+
     options = {'HG' : HG,
-               'form' : form}
+               'form' : form,
+               'AS' : AS}
 
     D = options[data_type]()
 
@@ -142,6 +185,38 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
         D[:, :, bad_electrodes] = np.nan
 
     return D
+
+def load_AS(blockpath,part='real',fbid=0):
+    """
+    Reads in HTK data.
+
+    Parameters
+    ----------
+    blockpath : str
+        Path to block.
+
+    Returns
+    -------
+    hg : ndarray (n_channels, n_time)
+        High gamma data.
+    fs_hg : float
+        Sampling frequency of data.
+    """
+
+    if part=='real':
+        htk_path = os.path.join(blockpath, 'HilbReal_4to200_40band')
+    elif part=='imag':
+        htk_path = os.path.join(blockpath, 'HilbImag_4to200_40band')
+
+    HTKout = HTK_hilb.readHTKs(htk_path)
+
+    s = HTKout['data'][fbid]
+
+    # Frequency in Hz
+    fs = HTKout['sampling_rate']/1e4
+
+    return (s, fs)
+
 
 def load_HG(blockpath):
     """

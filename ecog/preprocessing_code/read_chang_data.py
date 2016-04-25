@@ -58,8 +58,8 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     else:
         raise ValueError("task must of one of ['CV']: "+str(task)+'.')
 
-    if data_type not in ['HG']:
-        raise ValueError("data_type must be one of ['HG']: "+str(data_type)+'.')
+    if data_type not in ['HG','AS']:
+        raise ValueError("data_type must be one of ['HG','AS']: "+str(data_type)+'.')
 
     if align_window is None:
         align_window = np.array([-1., 1.])
