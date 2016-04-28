@@ -23,6 +23,14 @@ setup(
     long_description=long_description,
     author='Jesse Livezey',
     author_email='jesse.livezey@berkeley.edu'
+
+    install_requires = [
+      'h5py',
+      'numpy',
+      'scipy',
+      'optparse',
+      'pyfftw',
+    ],
 )
 """
 # To provide executable scripts, use entry points in preference to the
