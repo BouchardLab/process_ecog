@@ -1,6 +1,7 @@
 from __future__ import division
 import numpy as np
 from scipy.signal import firwin2,filtfilt
+from tqdm import tqdm
 
 __authors__ = "Alex Bujan"
 
@@ -24,12 +25,12 @@ def applyLineNoiseNotch(X,rate):
 
     """
     nyquist = rate/2
-    notch   = 60.
-    while notch<nyquist:
+    noise_hz   = 60.
+    notches = np.arange(noise_hz, nyquist, noise_hz)
+    for notch in tqdm(notches, 'applying notch filters'):
         filt = firwin2(1000+1,np.array([0,notch-1,notch-.5,\
                        notch+.5,notch+1,nyquist])/nyquist,\
                        [1,1,0,0,1,1])
-        X   = filtfilt(filt,1,X)
-        notch+=60.
+        X   = filtfilt(filt, 1, X)
     return X
 
