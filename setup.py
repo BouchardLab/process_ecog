@@ -28,7 +28,8 @@ setup(
       'h5py',
       'numpy',
       'scipy',
-      'pyfftw']
+      'pyfftw',
+      'tqdm']
     )
 """
 # To provide executable scripts, use entry points in preference to the
