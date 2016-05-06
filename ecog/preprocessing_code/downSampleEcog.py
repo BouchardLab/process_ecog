@@ -1,13 +1,15 @@
 from __future__ import division
 import numpy as np
-from scikits.samplerate import resample
+#from scikits.samplerate import resample  # I'm having trouble installing this library
+from scipy.signal import resample as scipy_resample
+from tqdm import tqdm
 
 __authors__ = "Alex Bujan"
 
-def downsampleEcog(X,new,old):
+def downsampleEcog(X, new, old):
     """Down-samples the ECoG signal from the original sampling frequency (of)
         to a new frequency (nf)
-    
+
     Parameters
     ----------
 
@@ -22,25 +24,27 @@ def downsampleEcog(X,new,old):
 
     Returns
     -------
-    
+
     Xds : array
-            Downsampled data
+            Downsampled data, dimensions (n_channels, n_timePoints)
 
     Notes
     -----
 
     This script uses the python package samplerate found here:
-    https://pypi.python.org/pypi/scikits.samplerate 
+    https://pypi.python.org/pypi/scikits.samplerate
 
-    This package provides a better replacement of Matlab's resample 
-    function than Scipy. To install this package follow the instructions in 
+    This package provides a better replacement of Matlab's resample
+    function than Scipy. To install this package follow the instructions in
     samplerate_installation.txt
 
     """
-    for i in xrange(X.shape[0]):
-        X_tmp = resample(X[i],new/old,'sinc_best')
-        if i==0:
-            Xds = np.zeros((X.shape[0],len(X_tmp)))
-        Xds[i] = X_tmp.copy()
-    return Xds
+    Xds = np.ones((X.shape[0], np.ceil(X.shape[1] * new / old)))
 
+    for i, chan in enumerate(tqdm(X, desc='Downsampling')):
+        Xds[i] = scipy_resample(chan, np.ceil(len(chan) * new / old))
+        #X_tmp = resample(X[i],new/old,'sinc_best')
+
+    #Xds = scipy_resample(X, np.round(X.shape[1]*new/old), axis=1)
+
+    return Xds
