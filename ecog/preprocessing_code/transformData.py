@@ -1,20 +1,22 @@
 from __future__ import division
 import os
+import glob
+
 import numpy as np
 import h5py
-import glob
-#from pyfftw.interfaces.numpy_fft import fft,ifft,fftfreq
-from numpy.fft import fft, ifft, fftfreq
-from scipy.io import loadmat
+import scipy
+from scipy.io import loadmat, savemat
 from optparse import OptionParser
+from tqdm import tqdm
 
 import ecog.preprocessing_code.HTK_hilb as htk
 import ecog.preprocessing_code.downSampleEcog as dse
 import ecog.preprocessing_code.subtractCAR as scar
 import ecog.preprocessing_code.applyLineNoiseNotch as notch
 import ecog.preprocessing_code.applyHilbertTransform as aht
-from tqdm import tqdm
 import ecog.preprocessing_code.deleteBadTimeSegments as dbts
+
+import pdb
 
 __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 
@@ -119,26 +121,26 @@ def main():
               store=store,srf=options.srf)
 
 
-def transform(path, subject, block, rate=400., vsmc=False,
-              cts=None, sds=None, srf=1e4):
+def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suffix=''):
     """
     Takes raw LFP data and does the standard hilb algorithm:
     1) CAR
     2) notch filters
     3) Hilbert transform on different Gaussian bands
+    ...
 
-    Saves to os.path.join(b_path, subject + '_B' + block + '_Hilb.h5')
+    Saves to os.path.join(blockpath, subject + '_B' + block + '_Hilb.h5')
 
     Parameters
     ----------
-    path
-    subject
-    block
+    blockpath
     rate
     vsmc
     cts: filter center frequencies. If None, use Chang lab defaults
-    sds: filer standard deviations. If NOne, use Chang lab defaults
-    srf
+    sds: filer standard deviations. If None, use Chang lab defaults
+    srf: htk multiple
+
+    takes about 20 minutes to run on 1 10-min block
 
     Returns
     -------
@@ -151,44 +153,45 @@ def transform(path, subject, block, rate=400., vsmc=False,
 
     ######## setup bandpass hilbert filter parameters
     if cts is None:
-        fq_min = 4.
+        fq_min = 4.0749286538265
         fq_max = 200.
-
         scale = 7.
-        a = [np.log10(.39), .5]
-
         cts = 2 ** (np.arange(np.log2(fq_min) * scale, np.log2(fq_max) * scale) / scale)
+    else:
+        cts = np.array(cts)
 
-        if sds is None:
-            sds = -a[0] * cts ** a[1]
+    if sds is None:
+        sds = 10 ** ( np.log10(.39) + .5 * (np.log10(cts)))
     ########
+    #pdb.set_trace()
 
 
+    s_path, blockname = os.path.split(blockpath)
 
-    block = str(block)
-    s_path = os.path.join(path, subject)
-    b_path = os.path.join(s_path, subject + '_B' + block)
     #b_path = '%s/%s/%s_%s'%(path,subject,subject,block)
 
     # first, look for downsampled ECoG in block folder
-    ds_ecog_path = os.path.join(b_path, 'ecog400', 'ecog.mat')
+    ds_ecog_path = os.path.join(blockpath, 'ecog400', 'ecog.mat')
     if os.path.isfile(ds_ecog_path):
         print('loading ecog')
         with h5py.File(ds_ecog_path, 'r') as f:
-            X = f['ecogDS']['data'][:].T.astype('float32')
+            X = f['ecogDS']['data'][:].T
             fs = f['ecogDS']['sampFreq'][0]
     else:
         """
         Load raw HTK files
         """
-        rd_path = '%s/RawHTK'%b_path
+        rd_path = os.path.join(blockpath, 'RawHTK')
         HTKoutR = htk.readHTKs(rd_path)
         X = HTKoutR['data']
 
         """
         Downsample to 400 Hz
         """
-        X = dse.downsampleEcog(X,rate,HTKoutR['sampling_rate']/srf)
+        X = dse.downsampleEcog(X, rate, HTKoutR['sampling_rate'] / srf)
+
+        os.mkdir(os.path.join(blockpath, 'ecog400'))
+        savemat(ds_ecog_path, {'ecogDS':{'data': X, 'sampFreq': rate}})
 
     """
     Subtract CAR
@@ -204,8 +207,13 @@ def transform(path, subject, block, rate=400., vsmc=False,
         elects = np.where((labels == 'precentral') | (labels == 'postcentral'))[0]
     else:
         elects = range(256)
-    badElects = np.loadtxt('/%s/Artifacts/badChannels.txt'%b_path)-1
-    elects = np.setdiff1d(elects,badElects)
+
+    badElects = np.loadtxt('/%s/Artifacts/badChannels.txt'%blockpath)-1
+    # I would prefer to keep track of bad channels with NaNs. If you remove them, it becomes cumbersome to keep
+    # track of the shift in electrode numbers. I would also be open to masked arrays.
+    #elects = np.setdiff1d(elects,badElects)
+    X[badElects.astype('int')] = np.nan
+
 
     X = X[elects]
 
@@ -225,7 +233,7 @@ def transform(path, subject, block, rate=400., vsmc=False,
     Apply Hilbert transform and store
     """
 
-    hilb_path = os.path.join(b_path, subject + '_B' + block + '_Hilb.h5')
+    hilb_path = os.path.join(blockpath, blockname + '_Hilb' + suffix +'.h5')
     with h5py.File(hilb_path, 'w') as f:
         dset_real = f.create_dataset('X_real', (len(cts), X.shape[0], X.shape[1]), 'float32', compression="gzip")
         dset_imag = f.create_dataset('X_imag', (len(cts), X.shape[0], X.shape[1]), 'float32', compression="gzip")

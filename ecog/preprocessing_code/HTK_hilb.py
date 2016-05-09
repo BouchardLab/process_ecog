@@ -136,7 +136,7 @@ def toHTK(file_data, file_path, data_type = 'HTK', big_endian = True,
         np.array(data, dtype=endian+'f4').T.tofile(f)
 
 
-def readHTKs(dir_path,electrodes = None):
+def readHTKs(dir_path, electrodes=None):
     """
     Reads all of the HTK files in a directory, takes the mean, and outputs a matrix that contains all of the channels together
 
@@ -156,7 +156,7 @@ def readHTKs(dir_path,electrodes = None):
     num_fbands  = htkout['data'].shape[0]
 
 
-    alldata = np.zeros((num_fbands,len(electrodes),num_samples))  # malloc
+    alldata = np.zeros((num_fbands,len(electrodes), num_samples))  # malloc
 
     for ifile in electrodes:
         htkout = readHTK(dir_path + '/Wav%i%i.htk'%(np.ceil((ifile+1)/64.),np.mod(ifile,64)+1))

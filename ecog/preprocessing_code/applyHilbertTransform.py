@@ -1,15 +1,11 @@
 from __future__ import division
 import numpy as np
-
-try:
-    from pyfftw.interfaces.numpy_fft import fft,ifft,fftfreq
-except:
-    from numpy.fft import fft,ifft,fftfreq
+from pyfftw.interfaces.numpy_fft import fft,ifft,fftfreq
 
 __authors__ = "Alex Bujan"
 
 
-def applyHilbertTransform(X,rate,center,sd):
+def applyHilbertTransform(X, rate, center, sd):
     """Apply bandpass filtering with Hilbert transform using a Gaussian kernel
     
     Parameters
@@ -25,7 +21,7 @@ def applyHilbertTransform(X,rate,center,sd):
     
     sd  : float,
             Standard deviation of the Gaussian kernel
-
+    .
     Returns
     -------
 
@@ -44,4 +40,5 @@ def applyHilbertTransform(X,rate,center,sd):
     k  = np.exp((-(np.abs(freq)-center)**2)/(2*(sd**2)))
     #compute analytical signal
     Xc = ifft(fft(X)*h*k)
+
     return Xc
