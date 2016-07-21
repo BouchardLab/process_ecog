@@ -186,7 +186,7 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
 
     return D
 
-def load_AS(blockpath,part='real',fbid=0):
+def load_AS(blockpath, part='real', fbid=0):
     """
     Reads in HTK data.
 
@@ -208,7 +208,7 @@ def load_AS(blockpath,part='real',fbid=0):
     elif part=='imag':
         htk_path = os.path.join(blockpath, 'HilbImag_4to200_40band')
 
-    HTKout = HTK_hilb.readHTKs(htk_path)
+    HTKout = HTK_hilb.read_HTKs(htk_path)
 
     s = HTKout['data'][fbid]
 

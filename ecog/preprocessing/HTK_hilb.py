@@ -11,7 +11,6 @@
 #-------------------------------------------------------------------------------
 
 import os
-
 import numpy as np
 
 
@@ -23,22 +22,28 @@ import numpy as np
 # the HTK file construction.
 SAMPLING_RATE_FACTOR = 1e4
 
-def readHTK(file_path, data_type = 'HTK', big_endian = True,
-            scale_s_rate = False):
+def read_HTK(file_path, data_type='HTK', big_endian=True,
+            scale_s_rate=False):
     """
     Reads data from a HTK file
 
-    Parameters:
-    - file_path     (string)  - The HTK file name
-    - data_type     (string)  - Specifies the data type (view getFilePath for
-                                more details)
-    - big_endian    (Boolean) - Specifies whether or not the data is big endian
-                                (if False, then the data is little endian)
-    - scale_s_rate  (Boolean) - Specifies whether or note to divide the sampling
-                                rate specified by the HTK file by the sampling
-                                rate scaling factor
+    Parameters
+    ----------
+    file_path : str
+        The HTK file name
+    data_type : str
+        Specifies the data type (view getFilePath for
+                               more details)
+    big_endian : bool
+        Specifies whether or not the data is big endian
+        (if False, then the data is little endian)
+    scale_s_rate : bool
+        Specifies whether or note to divide the sampling
+        rate specified by the HTK file by the sampling
+        rate scaling factor
 
-    Returns:
+    Returns
+    -------
     A dictionary containing the data from the file
     """
 
@@ -71,28 +76,34 @@ def readHTK(file_path, data_type = 'HTK', big_endian = True,
             'parameter_kind': parameter_kind,
             'data':           data}
 
-def toHTK(file_data, file_path, data_type = 'HTK', big_endian = True,
-          scale_s_rate = False):
+def write_HTK(file_data, file_path, data_type='HTK', big_endian=True,
+              scale_s_rate=False):
     """
     Writes data to a HTK file.
 
-    Parameters:
-    - file_data     (dict)    - A dictionary containing the following items:
-                                - 'num_samples'    : The number of samples
-                                - 'sampling_rate'  : The sampling rate (in Hz)
-                                - 'sample_size'    : Unknown
-                                - 'parameter_kind' : Unknown
-                                - 'data'           : The data points
-                                The sample size and parameter kind items are
-                                optional; the others are required.
-    - file_name     (string)  - The HTK file name
-    - data_type     (string)  - Specifies the data type (view getFilePath for
-                                more details)
-    - big_endian    (Boolean) - Specifies whether or not the data is big endian
-                                (if False, then the data is little endian)
-    - scale_s_rate  (Boolean) - Specifies whether or note to multiply the
-                                sampling rate specified by the HTK file by the
-                                sampling rate scaling factor
+    Parameters
+    ----------
+    file_data : dict
+        A dictionary containing the following items:
+            'num_samples'    : The number of samples
+            'sampling_rate'  : The sampling rate (in Hz)
+            'sample_size'    : Unknown
+            'parameter_kind' : Unknown
+            'data'           : The data points
+        The sample size and parameter kind items are
+        optional; the others are required.
+    file_name : str
+        The HTK file name
+    data_type : str
+        Specifies the data type (view getFilePath for
+        more details)
+    big_endian : bool
+        Specifies whether or not the data is big endian
+        (if False, then the data is little endian)
+    scale_s_rate : bool
+        Specifies whether or note to multiply the
+        sampling rate specified by the HTK file by the
+        sampling rate scaling factor
     """
 
     # Creates the endian variable that will be used when specifying data types
@@ -100,7 +111,6 @@ def toHTK(file_data, file_path, data_type = 'HTK', big_endian = True,
         endian = '>'
     else:
         endian = '<'
-
 
     # Obtains relevant values from the file data dictionary. If the sample
     # size or the parameter kind keys are not in the dictionary, then
@@ -135,37 +145,39 @@ def toHTK(file_data, file_path, data_type = 'HTK', big_endian = True,
         # Writes the data
         np.array(data, dtype=endian+'f4').T.tofile(f)
 
-
-def readHTKs(dir_path, electrodes=None):
+def read_HTKs(dir_path, electrodes=None):
     """
-    Reads all of the HTK files in a directory, takes the mean, and outputs a matrix that contains all of the channels together
+    Reads all of the HTK files in a directory, takes the mean,
+    and outputs a matrix that contains all of the channels together
 
-    Parameters:
-    - dir_path       (string)  - Directory that contains HTK files
-    - electrodes     (array)   - List of which electrodes to include. Default is all in dir
+    Parameters
+    ----------
+    dir_path : str
+        Directory that contains HTK files
+    electrodes : list
+        List of which electrodes to include. Default is all in dir
 
-    Returns:
+    Returns
+    -------
     A dictionary containing the data from the directory
     """
+
     num_files = len(os.listdir(dir_path))
     if not electrodes:
         electrodes = range(256)
 
-    htkout = readHTK(dir_path + '/Wav11.htk')
+    htkout = read_HTK(dir_path + '/Wav11.htk')
     num_samples = htkout['data'].shape[1]
     num_fbands  = htkout['data'].shape[0]
-
 
     alldata = np.zeros((num_fbands,len(electrodes), num_samples))  # malloc
 
     for ifile in electrodes:
-        htkout = readHTK(dir_path + '/Wav%i%i.htk'%(np.ceil((ifile+1)/64.),np.mod(ifile,64)+1))
+        htkout = read_HTK(dir_path + '/Wav%i%i.htk'%(np.ceil((ifile+1)/64.),np.mod(ifile,64)+1))
         alldata[:,ifile,:] = htkout['data']
 
-
     return {'num_samples':    htkout['num_samples'],
-        'sampling_rate':  float(htkout['sampling_rate']),
-        'sample_size':    htkout['sample_size'],
-        'parameter_kind': htkout['parameter_kind'],
-        'data':           np.squeeze(alldata)}
-
+            'sampling_rate':  float(htkout['sampling_rate']),
+            'sample_size':    htkout['sample_size'],
+            'parameter_kind': htkout['parameter_kind'],
+            'data':           np.squeeze(alldata)}

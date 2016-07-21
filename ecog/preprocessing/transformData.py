@@ -182,7 +182,7 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
         Load raw HTK files
         """
         rd_path = os.path.join(blockpath, 'RawHTK')
-        HTKoutR = htk.readHTKs(rd_path)
+        HTKoutR = htk.read_HTKs(rd_path)
         X = HTKoutR['data']
 
         """
