@@ -4,7 +4,7 @@ __author__ = 'David Conant, Jesse Livezey'
 import argparse, h5py, multiprocessing, sys, os
 import numpy as np
 
-from .utils import transcripts, make_data
+from .tokenize import transcripts, make_data
 
 
 def htk_to_hdf5(path, blocks, output_folder=None, task='CV',

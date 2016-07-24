@@ -35,7 +35,7 @@ def is_overlap(time_window, time_windows_array):
 
     return [overlap(time_window,this_time_window) for this_time_window in time_windows_array]
 
-def isin(tt, tbounds):
+def is_in(tt, tbounds):
     """
     util: Is time inside time window(s)?
 

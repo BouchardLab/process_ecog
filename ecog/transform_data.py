@@ -9,12 +9,12 @@ from scipy.io import loadmat, savemat
 from optparse import OptionParser
 from tqdm import tqdm
 
-import ecog.HTK_hilb as htk
-import ecog.downsample as dse
-import ecog.subtract_CAR as scar
-import ecog.apply_linenoise_notch as notch
-import ecog.apply_hilbert_transform as aht
-import ecog.delete_bad_time_segments as dbts
+import .signal_processing.HTK_hilb as htk
+import .signal_processing.downsample as dse
+import .signal_processing.subtract_CAR as scar
+import .signal_processing.apply_linenoise_notch as notch
+import .signal_processing.apply_hilbert_transform as aht
+import .signal_processing.delete_bad_time_segments as dbts
 
 import pdb
 
