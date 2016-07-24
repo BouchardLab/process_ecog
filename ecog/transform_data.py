@@ -9,12 +9,12 @@ from scipy.io import loadmat, savemat
 from optparse import OptionParser
 from tqdm import tqdm
 
-import ecog.preprocessing_code.HTK_hilb as htk
-import ecog.preprocessing_code.downSampleEcog as dse
-import ecog.preprocessing_code.subtractCAR as scar
-import ecog.preprocessing_code.applyLineNoiseNotch as notch
-import ecog.preprocessing_code.applyHilbertTransform as aht
-import ecog.preprocessing_code.deleteBadTimeSegments as dbts
+import ecog.HTK_hilb as htk
+import ecog.downsample as dse
+import ecog.subtract_CAR as scar
+import ecog.apply_linenoise_notch as notch
+import ecog.apply_hilbert_transform as aht
+import ecog.delete_bad_time_segments as dbts
 
 import pdb
 
@@ -188,7 +188,7 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
         """
         Downsample to 400 Hz
         """
-        X = dse.downsampleEcog(X, rate, HTKoutR['sampling_rate'] / srf)
+        X = dse.downsample_ecog(X, rate, HTKoutR['sampling_rate'] / srf)
 
         os.mkdir(os.path.join(blockpath, 'ecog400'))
         savemat(ds_ecog_path, {'ecogDS':{'data': X, 'sampFreq': rate}})
@@ -227,7 +227,7 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
     """
     Apply Notch filters
     """
-    X = notch.applyLineNoiseNotch(X, rate)
+    X = notch.apply_linenoise_notch(X, rate)
 
     """
     Apply Hilbert transform and store
@@ -238,7 +238,7 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
         dset_real = f.create_dataset('X_real', (len(cts), X.shape[0], X.shape[1]), 'float32', compression="gzip")
         dset_imag = f.create_dataset('X_imag', (len(cts), X.shape[0], X.shape[1]), 'float32', compression="gzip")
         for i, (ct, sd) in enumerate(tqdm(zip(cts, sds), 'applying Hilbert transform', total=len(cts))):
-            dat = aht.applyHilbertTransform(X, rate, ct, sd)
+            dat = aht.apply_hilbert_transform(X, rate, ct, sd)
             dset_real[i] = dat.real.astype('float32')
             dset_imag[i] = dat.imag.astype('float32')
 
