@@ -4,16 +4,12 @@ __author__ = 'David Conant, Jesse Livezey'
 import argparse, h5py, multiprocessing, sys, os
 import numpy as np
 
-from utils import transcripts, make_data
-
-
-# multiprocessing or python map()
-mp = True
+from .utils import transcripts, make_data
 
 
 def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                 align_window=None, align_pos = 0,
-                data_type='HG', zscore='events'):
+                data_type='HG', zscore='events', mp=True):
     """
     Process task data into segments with labels.
 
@@ -213,6 +209,8 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--align_pos', type=int, default=1)
     parser.add_argument('-d', '--data_type', default='HG')
     parser.add_argument('-b', '--zscore', default='events')
+    parser.add_argument('-m', '--mp', default=True)
     args = parser.parse_args()
     htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
-                args.align_window, args.align_pos, args.data_type, args.zscore)
+                args.align_window, args.align_pos, args.data_type, args.zscore,
+                args.mp)
