@@ -1,18 +1,14 @@
 __author__ = 'David Conant, Jesse Livezey'
 
-import os, glob, csv, h5py, pdb
+import csv, glob, h5py, multiprocessing, os, pdb
+
 import numpy as np
 import scipy as sp
-
 import scipy.stats as stats
 from scipy.io import loadmat
 
-#from scikits.samplerate import resample
-import multiprocessing
-
 import ..utils
-import from ..utils import HTK, transcripts
-import .HTK_hilb
+from ..utils import transcripts
 
 
 def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',

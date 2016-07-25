@@ -7,7 +7,10 @@ import h5py
 import scipy
 from scipy.io import loadmat, savemat
 from optparse import OptionParser
-from tqdm import tqdm
+try:
+    from tqdm import tqdm
+except:
+    tqdm = lambda x, *args, **kwargs: x
 
 import .signal_processing.HTK_hilb as htk
 import .signal_processing.downsample as dse
@@ -15,59 +18,11 @@ import .signal_processing.subtract_CAR as scar
 import .signal_processing.apply_linenoise_notch as notch
 import .signal_processing.apply_hilbert_transform as aht
 import .signal_processing.delete_bad_time_segments as dbts
+from .utils import load_electrode_labels
 
 import pdb
 
 __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
-
-
-def load_electrode_labels(subj_dir):
-    """
-    Get anatomy. Try newest format, and then progressively earlier formats.
-
-    :param subj_dir:
-    :return: np.array of labels as strings
-    """
-    anatomy_filename = glob.glob(os.path.join(subj_dir, '*_anat.mat'))
-    elect_labels_filename = glob.glob(os.path.join(subj_dir, 'elec_labels.mat'))
-    hd_grid_file = glob.glob(os.path.join(subj_dir, 'Imaging', 'elecs', 'hd_grid.mat'))
-    TDT_elecs_file = glob.glob(os.path.join(subj_dir, 'Imaging', 'elecs', 'TDT_elecs_all.mat'))
-
-    if TDT_elecs_file:
-        mat_in = loadmat(TDT_elecs_file[0])
-        try:
-            electrode_labels = mat_in['anatomy'][:, -1].ravel()
-            print('anatomy from TDT_elecs_all')
-            return np.array([a[0] for a in electrode_labels])
-        except:
-            pass
-
-    if hd_grid_file:
-        mat_in = loadmat(hd_grid_file[0])
-        if 'anatomy' in mat_in:
-            electrode_labels = np.concatenate(mat_in['anatomy'].ravel())
-            print('anatomy hd_grid')
-
-            return electrode_labels
-
-    if anatomy_filename:
-        anatomy = loadmat(anatomy_filename[0])
-        anat = anatomy['anatomy']
-        electrode_labels = np.array([''] * 256, dtype='S6')
-        for name in anat.dtype.names:
-            electrode_labels[anat[name][0, 0].flatten() - 1] = name
-        electrode_labels = np.array([word.decode("utf-8") for word in electrode_labels])
-        # electrode_labels = np.array([item[0][0] if len(item[0]) else '' for item in anatomy['electrodes'][0]])
-
-    elif elect_labels_filename:
-        a = scipy.io.loadmat(elect_labels_filename[0])
-        electrode_labels = np.array([elem[0] for elem in a['labels'][0]])
-
-    else:
-        electrode_labels = None
-        print('No electrode labels found')
-
-    return electrode_labels
 
 
 def main():
@@ -168,8 +123,6 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
 
     s_path, blockname = os.path.split(blockpath)
 
-    #b_path = '%s/%s/%s_%s'%(path,subject,subject,block)
-
     # first, look for downsampled ECoG in block folder
     ds_ecog_path = os.path.join(blockpath, 'ecog400', 'ecog.mat')
     if os.path.isfile(ds_ecog_path):
@@ -201,7 +154,6 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
     """
     Select electrodes
     """
-    #electrodes = loadmat('%s/%s/Anatomy/%s_anatomy.mat'%(path,subject,subject))
     labels = load_electrode_labels(s_path)
     if vsmc:
         elects = np.where((labels == 'precentral') | (labels == 'postcentral'))[0]
@@ -209,9 +161,6 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
         elects = range(256)
 
     badElects = np.loadtxt('/%s/Artifacts/badChannels.txt'%blockpath)-1
-    # I would prefer to keep track of bad channels with NaNs. If you remove them, it becomes cumbersome to keep
-    # track of the shift in electrode numbers. I would also be open to masked arrays.
-    #elects = np.setdiff1d(elects,badElects)
     X[badElects.astype('int')] = np.nan
 
 
@@ -221,8 +170,6 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
     Discard bad segments
     """
     #TODO
-#    badSgm = loadmat('%s/Artifacts/badTimeSegments.mat'%b_path)['badTimeSegments']
-#    dbts.deleteBadTimeSegments(X,rate,badSgm)
 
     """
     Apply Notch filters
@@ -254,7 +201,6 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
             dset.dims[1].label = 'channel'
             dset.dims[2].label = 'time'
         f.attrs['sampling_rate'] = rate
-
 
 
 if __name__=='__main__':

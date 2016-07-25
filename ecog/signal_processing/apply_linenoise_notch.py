@@ -4,7 +4,7 @@ from scipy.signal import firwin2, filtfilt
 try:
     from tqdm import tqdm
 except:
-    tqdn = None
+    tqdn = lambda x, *args, **kwargs: x
 
 __authors__ = "Alex Bujan"
 
@@ -28,12 +28,8 @@ def apply_linenoise_notch(X, rate):
     nyquist = rate/2
     noise_hz   = 60.
     notches = np.arange(noise_hz, nyquist, noise_hz)
-    if tqdn is None:
-        it = tqdm(notches, 'applying notch filters')
-    else:
-        it = notches
 
-    for notch in it:
+    for notch in tqdm(notches, 'applying notch filters'):
         filt = firwin2(1000+1,
                        np.array([0, notch-1, notch-.5,
                                  notch+.5, notch+1, nyquist]) / nyquist,
