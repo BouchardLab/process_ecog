@@ -31,4 +31,4 @@ if __name__ == "__main__":
     parser.add_argument('-p','--path', help='path to data folder')
     parser.add_argument('-s','--subject', help='subject code')
     args = parser.parse_args()
-    htk_to_hdf5(args.block,args.subject,args.path)
+    htk_to_hdf5(args.block, args.subject, args.path)
