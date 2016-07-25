@@ -1,20 +1,22 @@
 __author__ = 'David Conant, Jesse Livezey'
 
-import os, glob, csv, h5py
+import os, glob, csv, h5py, pdb
 import numpy as np
 import scipy as sp
 
 import scipy.stats as stats
 from scipy.io import loadmat
 
-from scikits.samplerate import resample
+#from scikits.samplerate import resample
+import multiprocessing
 
 import ..utils
 import from ..utils import HTK, transcripts
 import .HTK_hilb
 
+
 def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
-              all_event_times=None):
+              all_event_times=None,fband=None):
     """
     Extract requested data type.
 
@@ -74,6 +76,47 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
 
         return D
 
+    def AS():
+        global rank
+        try:
+            process = multiprocessing.current_process()
+            rank = int(process.name.split('-')[-1])-1
+        except:
+            rank = 0
+
+
+        if rank==0:
+            print('\nLoading electrodes ...')
+
+        bad_electrodes = load_bad_electrodes(blockpath) -1
+        bad_times = load_bad_times(blockpath)
+
+        part = data_type.split('_')[-1]
+
+        if rank==0:
+            print('\nLoading AS ...')
+
+        s, fs = load_AS(blockpath,part,fband)
+
+        if rank==0:
+            print('\nLoading AS done!')
+            print('\nZ-scoring with mode: %s'%zscore)
+
+        s = zscoreD(data=s,sampling_rate=fs,bad_times=bad_times,\
+                    align_window=align_window,mode=zscore,\
+                    all_event_times=all_event_times)
+
+        if rank==0:
+            print('\nMaking D ...')
+
+        D = makeD(s, fs, event_times, align_window,
+                  bad_times=bad_times, bad_electrodes=bad_electrodes)
+
+        if rank==0:
+            print('\nD done!')
+
+        return D
+
     def form():
         F = load_form(blockpath)
         D = makeD(F, 100, times, align_window, bad_times=np.array([]), bad_electrodes=np.array([]))
@@ -81,54 +124,49 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
         return D
 
 
-    def AS():
-        bad_electrodes = load_bad_electrodes(blockpath) -1
-        bad_times = load_bad_times(blockpath)
-        s, fs = load_AS(blockpath)
-
-        if zscore == 'whole':
-            s = stats.zscore(s, axis=1)
-        elif zscore == 'data':
-            tt_data = np.arange(s.shape[1]) / fs
-            data_start = all_event_times.min() + align_window[0]
-            data_stop = all_event_times.max() + align_window[1]
-            data_time = utils.isin(tt_data, np.array([data_start, data_stop]))
-            for bt in bad_times:
-                data_time = data_time & ~utils.isin(tt_data, bt)
-            data = s[:, data_time]
-            means = data.mean(axis=1, keepdims=True)
-            stds = data.std(axis=1, keepdims=True)
-            s = (s - means)/stds
-        elif zscore == 'events':
-            tt_data = np.arange(s.shape[1]) / fs
-            data_time = np.zeros_like(tt_data).astype(bool)
-            for et in all_event_times:
-                data_time = data_time | utils.isin(tt_data, et + align_window)
-            for bt in bad_times:
-                data_time = data_time & ~utils.isin(tt_data, bt)
-            data = s[:, data_time]
-            means = data.mean(axis=1, keepdims=True)
-            stds = data.std(axis=1, keepdims=True)
-            s = (s - means) / stds
-        elif ((zscore is None) or (zscore.lower() == 'none')):
-            pass
-        else:
-            raise ValueError('zscore type {} not recognized.'.format(zscore))
-
-
-        D = makeD(s, fs, event_times, align_window,
-                  bad_times=bad_times, bad_electrodes=bad_electrodes)
-
-        return D
-
-
     options = {'HG' : HG,
                'form' : form,
-               'AS' : AS}
+               'AS_I' : AS,
+               'AS_R' : AS,
+               'AS_AA': AS,}
 
     D = options[data_type]()
 
     return D
+
+def zscoreD(data,sampling_rate,bad_times,align_window,mode='events',\
+            all_event_times=None):
+
+    if mode == 'whole':
+        data = stats.zscore(data, axis=1)
+    elif mode == 'data':
+        tt_data = np.arange(data.shape[1]) / sampling_rate
+        data_start = all_event_times.min() + align_window[0]
+        data_stop = all_event_times.max() + align_window[1]
+        data_time = utils.isin(tt_data, np.array([data_start, data_stop]))
+        for bt in bad_times:
+            data_time = data_time & ~utils.isin(tt_data, bt)
+        tmp   = data[:, data_time]
+        means = tmp.mean(axis=1, keepdims=True)
+        stds  = tmp.std(axis=1, keepdims=True)
+        data  = (data - means)/stds
+    elif mode == 'events':
+        tt_data = np.arange(data.shape[1]) / sampling_rate
+        data_time = np.zeros_like(tt_data).astype(bool)
+        for et in all_event_times:
+            data_time = data_time | utils.isin(tt_data, et + align_window)
+        for bt in bad_times:
+            data_time = data_time & ~utils.isin(tt_data, bt)
+        tmp   = data[:, data_time]
+        means = tmp.mean(axis=1, keepdims=True)
+        stds  = tmp.std(axis=1, keepdims=True)
+        data  = (data - means) / stds
+    elif ((mode is None) or (mode.lower() == 'none')):
+        pass
+    else:
+        raise ValueError('zscore type {} not recognized.'.format(mode))
+
+    return data
 
 def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_electrodes=None):
     """
@@ -187,7 +225,7 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
 
     return D
 
-def load_AS(blockpath, part='real', fbid=0):
+def load_AS(blockpath, part='R', fband=18):
     """
     Reads in HTK data.
 
@@ -204,17 +242,38 @@ def load_AS(blockpath, part='real', fbid=0):
         Sampling frequency of data.
     """
 
-    if part=='real':
-        htk_path = os.path.join(blockpath, 'HilbReal_4to200_40band')
-    elif part=='imag':
-        htk_path = os.path.join(blockpath, 'HilbImag_4to200_40band')
+    if part=='R':
+        htk_path = [os.path.join(blockpath, 'HilbReal_4to200_40band')]
+    elif part=='I':
+        htk_path = [os.path.join(blockpath, 'HilbImag_4to200_40band')]
+    elif part=='AA':
+        htk_path = [os.path.join(blockpath, 'HilbReal_4to200_40band'),\
+                    os.path.join(blockpath, 'HilbImag_4to200_40band')]
+    for i in xrange(len(htk_path)):
+        htk_path[i] = '%s_%i.h5'%(htk_path[i],fband)
 
-    HTKout = HTK_hilb.read_HTKs(htk_path)
+    if rank==0:
+        print('\nReading data from %s'%htk_path)
+        print('\nFrequency band: %i'%fband)
+        print('\nLoading please wait ...')
 
-    s = HTKout['data'][fbid]
+#    HTKout = HTK_hilb.readHTKs(htk_path)
 
-    # Frequency in Hz
-    fs = HTKout['sampling_rate']/1e4
+    if len(htk_path)==1:
+        HTKout = h5py.File(htk_path[0],'r')
+        s = HTKout['data'].value
+        if rank==0:
+            print('\nHTKs read!')
+        # Frequency in Hz
+        fs = HTKout['sampling_rate'][0]
+    elif len(htk_path)==2:
+        HTKoutR = h5py.File(htk_path[0],'r')
+        HTKoutI = h5py.File(htk_path[1],'r')
+        s = np.abs(HTKoutR['data'].value+1j*HTKoutI['data'].value)
+        # Frequency in Hz
+        fs = HTKoutR['sampling_rate'][0]
+
+#    fs = HTKout['sampling_rate']/1e4
 
     return (s, fs)
 
@@ -255,10 +314,7 @@ def loadForm(blockpath):
 
 def load_anatomy(subj_dir):
 
-    if os.path.exists(os.path.join(subj_dir, 'Anatomy')):
-        anatomy_filename = glob.glob(os.path.join(subj_dir, 'Anatomy', '*_anatomy.mat'))[0]
-    else:
-        anatomy_filename = glob.glob(os.path.join(subj_dir, 'anatomy', '*_anatomy.mat'))[0]
+    anatomy_filename = glob.glob(os.path.join(subj_dir, 'anatomy', '*_anatomy.mat'))[0]
     elect_labels_filename = glob.glob(os.path.join(subj_dir, 'elec_labels.mat'))
 
     electrode_labels = dict()
