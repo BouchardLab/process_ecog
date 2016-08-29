@@ -5,7 +5,7 @@ import glob
 import numpy as np
 import h5py
 import scipy
-from scipy.io import loadmat, savemat
+from scipy.io import savemat
 import argparse
 try:
     from tqdm import tqdm
@@ -17,10 +17,10 @@ import ecog.signal_processing.downsample as dse
 import ecog.signal_processing.subtract_CAR as scar
 import ecog.signal_processing.apply_linenoise_notch as notch
 import ecog.signal_processing.apply_hilbert_transform as aht
+from ecog.signal_processing.apply_hilbert_transform import gaussian, hamming
 import ecog.signal_processing.delete_bad_time_segments as dbts
-from ecog.utils import load_electrode_labels
+from ecog.utils import load_electrode_labels, load_bad_electrodes
 
-import pdb
 
 __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 
@@ -29,56 +29,46 @@ def main():
     usage = '%prog [options]'
 
     parser = argparse.ArgumentParser(description='Preprocessing ecog data.')
-
     parser.add_argument('subject', type=str, help="Subject code")
-
     parser.add_argument('blocks', type=int, nargs='+',
                         help="Block number eg: '1'")
-
     parser.add_argument('path', type=str, help="Path to the data")
-
     parser.add_argument('r', '--rate', type=float, default=200.,
         help="Sampling rate of the processed signal (optional)")
-
     parser.add_argument('--vsmc', type=bool, default=True,
                         help="Include vSMC electrodes only (optional)")
-
     parser.add_argument('--ct', type='float', default=None,
                         help="Center frequency of the Gaussian filter (optional)")
-
     parser.add_argument('--sd', type=float, default=None,
                         help="Standard deviation of the Gaussian filter (optional)")
-
     parser.add_argument('n', '--neuro', type=bool, default=False,
                         help="Use standard neuroscience boxcar frequency bands")
-
     parser.add_argument('--srf', type=float, default=1e4,
                         help="Sampling rate factor. Read notes in HTK.py (optional)")
-
     args = parser.parse_args()
 
     for block in args.blocks:
-        blockpath = os.path.join(args.path, args.subject,
+        block_path = os.path.join(args.path, args.subject,
                 '{}_{}'.format(subject, block))
-        transform(blockpath, rate=args.rate, vsmc=args.vsmc,
+        transform(block_path, rate=args.rate, vsmc=args.vsmc,
                   ct=args.ct, sd=args.sd,
                   neuro=args.neuro, srf=args.srf)
 
 
-def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4,
+def transform(block_path, rate=400., vsmc=False, cts=None, sds=None, srf=1e4,
               neuro=False, suffix=''):
     """
     Takes raw LFP data and does the standard hilb algorithm:
     1) CAR
     2) notch filters
-    3) Hilbert transform on different Gaussian bands
+    3) Hilbert transform on different bands
     ...
 
-    Saves to os.path.join(blockpath, subject + '_B' + block + '_Hilb.h5')
+    Saves to os.path.join(block_path, subject + '_B' + block + '_Hilb.h5')
 
     Parameters
     ----------
-    blockpath
+    block_path
     rate
     vsmc
     cts: filter center frequencies. If None, use Chang lab defaults
@@ -91,29 +81,32 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4,
     -------
     Nothing. The result is too big to have in memory and is saved filter-by-filter to a h5.
 
-
-
     #ct=87.75,sd=3.65
     """
 
-    ######## setup bandpass hilbert filter parameters
-    if cts is None:
-        fq_min = 4.0749286538265
-        fq_max = 200.
-        scale = 7.
-        cts = 2 ** (np.arange(np.log2(fq_min) * scale, np.log2(fq_max) * scale) / scale)
+    if neuro:
+        bands = ['theta', 'alpha', 'beta', 'high beta', 'gamma', 'high gamma']
+        min_freqs = [4, 9, 15, 21, 30, 85]
+        max_freqs = [8, 14, 20, 29, 59, 175]
     else:
-        cts = np.array(cts)
+        if cts is None:
+            fq_min = 4.0749286538265
+            fq_max = 200.
+            scale = 7.
+            cts = 2 ** (np.arange(np.log2(fq_min) * scale, np.log2(fq_max) * scale) / scale)
+        else:
+            cts = np.array(cts)
 
-    if sds is None:
-        sds = 10 ** ( np.log10(.39) + .5 * (np.log10(cts)))
-    ########
+        if sds is None:
+            sds = 10 ** ( np.log10(.39) + .5 * (np.log10(cts)))
+        else:
+            sds = np.array(sds)
 
 
-    s_path, blockname = os.path.split(blockpath)
+    subj_path, blockname = os.path.split(block_path)
 
     # first, look for downsampled ECoG in block folder
-    ds_ecog_path = os.path.join(blockpath, 'ecog400', 'ecog.mat')
+    ds_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.mat')
     if os.path.isfile(ds_ecog_path):
         print('loading ecog')
         with h5py.File(ds_ecog_path, 'r') as f:
@@ -123,7 +116,7 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4,
         """
         Load raw HTK files
         """
-        rd_path = os.path.join(blockpath, 'RawHTK')
+        rd_path = os.path.join(block_path, 'RawHTK')
         HTKoutR = htk.read_HTKs(rd_path)
         X = HTKoutR['data']
 
@@ -132,33 +125,27 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4,
         """
         X = dse.downsample_ecog(X, rate, HTKoutR['sampling_rate'] / srf)
 
-        os.mkdir(os.path.join(blockpath, 'ecog400'))
+        os.mkdir(os.path.join(block_path, 'ecog400'))
         savemat(ds_ecog_path, {'ecogDS':{'data': X, 'sampFreq': rate}})
 
     """
     Subtract CAR
     """
-    X = scar.subtractCAR(X)
+    X = scar.subtract_CAR(X)
 
     """
     Select electrodes
     """
-    labels = load_electrode_labels(s_path)
+    labels = load_electrode_labels(subj_path)
     if vsmc:
         elects = np.where((labels == 'precentral') | (labels == 'postcentral'))[0]
     else:
         elects = range(256)
 
-    badElects = np.loadtxt('/%s/Artifacts/badChannels.txt'%blockpath)-1
-    X[badElects.astype('int')] = np.nan
-
+    bad_elects = load_bad_electrodes(subj_path)
+    X[bad_elects] = np.nan
 
     X = X[elects]
-
-    """
-    Discard bad segments
-    """
-    #TODO
 
     """
     Apply Notch filters
@@ -169,26 +156,57 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4,
     Apply Hilbert transform and store
     """
 
-    hilb_path = os.path.join(blockpath, blockname + '_Hilb' + suffix +'.h5')
+    if neuro:
+        hilb_path = os.path.join(block_path, blockname + '_neuro_Hilb' + suffix +'.h5')
+    else:
+        hilb_path = os.path.join(block_path, blockname + '_Hilb' + suffix +'.h5')
     with h5py.File(hilb_path, 'w') as f:
-        dset_real = f.create_dataset('X_real', (len(cts), X.shape[0], X.shape[1]), 'float32', compression="gzip")
-        dset_imag = f.create_dataset('X_imag', (len(cts), X.shape[0], X.shape[1]), 'float32', compression="gzip")
-        for i, (ct, sd) in enumerate(tqdm(zip(cts, sds), 'applying Hilbert transform', total=len(cts))):
-            dat = aht.apply_hilbert_transform(X, rate, ct, sd)
-            dset_real[i] = dat.real.astype('float32')
-            dset_imag[i] = dat.imag.astype('float32')
+        if neuro:
+            dset_real = f.create_dataset('X_real', (len(bands), X.shape[0], X.shape[1]),
+                                         'float32', compression="gzip")
+            dset_imag = f.create_dataset('X_imag', (len(bands), X.shape[0], X.shape[1]),
+                                         'float32', compression="gzip")
+            for ii, (min_f, max_f) in enumerate(tqdm(zip(min_freqs, max_freqs),
+                                                'applying Hilbert transform',
+                                                total=len(batch))):
+                kernel = hamming(X, rate, min_f, max_f)
+                dat = aht.apply_hilbert_transform(X, rate, kernel)
+                dset_real[ii] = dat.real.astype('float32')
+                dset_imag[ii] = dat.imag.astype('float32')
 
-        for dset in (dset_real, dset_imag):
+            for dset in [dset_real, dset_imag]:
+                dset.dims[0].label = 'band'
+                dset.dims[1].label = 'channel'
+                dset.dims[2].label = 'time'
+                for val, name in ((min_freqs, 'min frequency'), (max_freqs, 'max frequency')):
+                    if name not in f.keys():
+                        f[name] = val
+                    dset.dims.create_scale(f[name], name)
+                    dset.dims[0].attach_scale(f[name])
 
-            dset.dims[0].label = 'filter'
-            for val, name in ((cts, 'filter_center'), (sds, 'filter_sigma')):
-                if name not in f.keys():
-                    f[name] = val
-                dset.dims.create_scale(f[name], name)
-                dset.dims[0].attach_scale(f[name])
+        else:
+            dset_real = f.create_dataset('X_real', (len(cts), X.shape[0], X.shape[1]),
+                                         'float32', compression="gzip")
+            dset_imag = f.create_dataset('X_imag', (len(cts), X.shape[0], X.shape[1]),
+                                         'float32', compression="gzip")
+            for ii, (ct, sd) in enumerate(tqdm(zip(cts, sds),
+                                          'applying Hilbert transform',
+                                          total=len(cts))):
+                kernel = gaussian(X, rate, min_f, max_f)
+                dat = aht.apply_hilbert_transform(X, rate, kernel)
+                dset_real[ii] = dat.real.astype('float32')
+                dset_imag[ii] = dat.imag.astype('float32')
 
-            dset.dims[1].label = 'channel'
-            dset.dims[2].label = 'time'
+            for dset in [dset_real, dset_imag]:
+                dset.dims[0].label = 'filter'
+                dset.dims[1].label = 'channel'
+                dset.dims[2].label = 'time'
+                for val, name in ((cts, 'filter_center'), (sds, 'filter_sigma')):
+                    if name not in f.keys():
+                        f[name] = val
+                    dset.dims.create_scale(f[name], name)
+                    dset.dims[0].attach_scale(f[name])
+
         f.attrs['sampling_rate'] = rate
 
 

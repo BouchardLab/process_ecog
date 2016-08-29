@@ -337,36 +337,6 @@ def load_anatomy(subj_dir):
 
     return electrode_labels
 
-def load_bad_electrodes(blockpath):
-    """
-    Load bad electrodes.
-
-    Parameters
-    ----------
-    blockpath : str
-        Path to block to load bad electrodes from.
-
-    Returns
-    -------
-    bad_electrodes : ndarray
-        Indices of bad electrodes.
-    """
-
-    bad_electrodes = []
-    with open(os.path.join(blockpath, 'Artifacts', 'badChannels.txt'),'rt') as f:
-        lines = f.readlines()
-        for bes in lines:
-            for be in bes:
-                if be != '':
-                    try:
-                        be = int(be)
-                        bad_electrodes.append(be)
-                    except ValueError:
-                        pass
-
-    bad_electrodes = np.array([be-1 for be in bad_electrodes])
-
-    return bad_electrodes
 
 def load_bad_times(blockpath):
     """
