@@ -7,6 +7,23 @@ import numpy as np
 from .tokenize import transcripts, make_data
 
 
+def main()
+    parser = argparse.ArgumentParser(description='Preprocess ECoG Data')
+    parser.add_argument('path', help='path to subject folder')
+    parser.add_argument('blocks', nargs='+', type=str)
+    parser.add_argument('-o', '--output_folder', default=None)
+    parser.add_argument('-t', '--task', default='CV')
+    parser.add_argument('-w', '--align_window', nargs=2, type=float, default=[-.5, .79])
+    parser.add_argument('-p', '--align_pos', type=int, default=1)
+    parser.add_argument('-d', '--data_type', default='HG')
+    parser.add_argument('-b', '--zscore', default='events')
+    parser.add_argument('-m', '--mp', default=True)
+    parser.add_argument('-f', '--fband', type=int, default=18)
+    args = parser.parse_args()
+    htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
+                args.align_window, args.align_pos, args.data_type, args.zscore,
+                args.fband, args.mp)
+
 def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                 align_window=None, align_pos = 0,
                 data_type='HG', zscore='events',
@@ -146,7 +163,7 @@ def process_block(args):
     except:
         rank = 0
 
-    blockname = subject + '_B' + str(block)
+    blockname = subject + '_' + block
     if rank==0:
         print('\nProcessing subject %s'%subject)
         print('-----------------------')
@@ -266,18 +283,4 @@ def save_hdf5(fname, D, tokens, anat, B):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Preprocess ECoG Data')
-    parser.add_argument('path', help='path to subject folder')
-    parser.add_argument('blocks', nargs='+', type=int)
-    parser.add_argument('-o', '--output_folder', default=None)
-    parser.add_argument('-t', '--task', default='CV')
-    parser.add_argument('-w', '--align_window', nargs=2, type=float, default=[-.5, .79])
-    parser.add_argument('-p', '--align_pos', type=int, default=1)
-    parser.add_argument('-d', '--data_type', default='HG')
-    parser.add_argument('-b', '--zscore', default='events')
-    parser.add_argument('-m', '--mp', default=True)
-    parser.add_argument('-f', '--fband', type=int, default=18)
-    args = parser.parse_args()
-    htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
-                args.align_window, args.align_pos, args.data_type, args.zscore,
-                args.fband, args.mp)
+    main()

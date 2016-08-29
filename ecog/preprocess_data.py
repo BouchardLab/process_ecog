@@ -6,7 +6,7 @@ import numpy as np
 import h5py
 import scipy
 from scipy.io import loadmat, savemat
-from optparse import OptionParser
+import argparse
 try:
     from tqdm import tqdm
 except:
@@ -28,55 +28,45 @@ __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 def main():
     usage = '%prog [options]'
 
-    parser = OptionParser(usage)
+    parser = argparse.ArgumentParser(description='Preprocessing ecog data.')
 
-    parser.add_option("--subject",type="string",default='GP31',\
-        help="Subject code")
+    parser.add_argument('subject', type=str, help="Subject code")
 
-    parser.add_option("--block",type="string",default='B1',\
-        help="Block number eg: 'B1'")
+    parser.add_argument('blocks', type=int, nargs='+',
+                        help="Block number eg: '1'")
 
-    parser.add_option("--path",type="string",default='',\
-        help="Path to the data")
+    parser.add_argument('path', type=str, help="Path to the data")
 
-    parser.add_option("--rate",type="float",default=400.,\
+    parser.add_argument('r', '--rate', type=float, default=200.,
         help="Sampling rate of the processed signal (optional)")
 
-    parser.add_option("--vsmc",action='store_true',\
-        dest='vsmc',help="Include vSMC electrodes only (optional)")
+    parser.add_argument('--vsmc', type=bool, default=True,
+                        help="Include vSMC electrodes only (optional)")
 
-    parser.add_option("--store",action='store_true',\
-        dest='store',help="Store results (optional)")
+    parser.add_argument('--ct', type='float', default=None,
+                        help="Center frequency of the Gaussian filter (optional)")
 
-    parser.add_option("--ct",type="float",default=87.75,\
-        help="Center frequency of the Gaussian filter (optional)")
+    parser.add_argument('--sd', type=float, default=None,
+                        help="Standard deviation of the Gaussian filter (optional)")
 
-    parser.add_option("--sd",type="float",default=3.65,\
-        help="Standard deviation of the Gaussian filter (optional)")
+    parser.add_argument('n', '--neuro', type=bool, default=False,
+                        help="Use standard neuroscience boxcar frequency bands")
 
-    parser.add_option("--srf",type="float",default=1e4,\
-        help="Sampling rate factor. Read notes in HTK.py (optional)")
+    parser.add_argument('--srf', type=float, default=1e4,
+                        help="Sampling rate factor. Read notes in HTK.py (optional)")
 
-    (options, args) = parser.parse_args()
+    args = parser.parse_args()
 
-    assert options.path!='',IOError('Inroduce a correct data path!')
-
-    if options.vsmc:
-        vsmc=True
-    else:
-        vsmc=False
-
-    if options.store:
-        store=True
-    else:
-        store=False
-
-    transform(path=options.path,subject=options.subject,block=options.block,\
-              rate=options.rate,vsmc=vsmc,ct=options.ct,sd=options.sd,\
-              store=store,srf=options.srf)
+    for block in args.blocks:
+        blockpath = os.path.join(args.path, args.subject,
+                '{}_{}'.format(subject, block))
+        transform(blockpath, rate=args.rate, vsmc=args.vsmc,
+                  ct=args.ct, sd=args.sd,
+                  neuro=args.neuro, srf=args.srf)
 
 
-def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suffix=''):
+def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4,
+              neuro=False, suffix=''):
     """
     Takes raw LFP data and does the standard hilb algorithm:
     1) CAR
@@ -118,7 +108,6 @@ def transform(blockpath, rate=400., vsmc=False, cts=None, sds=None, srf=1e4, suf
     if sds is None:
         sds = 10 ** ( np.log10(.39) + .5 * (np.log10(cts)))
     ########
-    #pdb.set_trace()
 
 
     s_path, blockname = os.path.split(blockpath)
