@@ -12,13 +12,13 @@ try:
 except:
     tqdm = lambda x, *args, **kwargs: x
 
-import .signal_processing.HTK_hilb as htk
-import .signal_processing.downsample as dse
-import .signal_processing.subtract_CAR as scar
-import .signal_processing.apply_linenoise_notch as notch
-import .signal_processing.apply_hilbert_transform as aht
-import .signal_processing.delete_bad_time_segments as dbts
-from .utils import load_electrode_labels
+import ecog.signal_processing.HTK_hilb as htk
+import ecog.signal_processing.downsample as dse
+import ecog.signal_processing.subtract_CAR as scar
+import ecog.signal_processing.apply_linenoise_notch as notch
+import ecog.signal_processing.apply_hilbert_transform as aht
+import ecog.signal_processing.delete_bad_time_segments as dbts
+from ecog.utils import load_electrode_labels
 
 import pdb
 

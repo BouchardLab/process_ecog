@@ -4,7 +4,7 @@ __author__ = 'David Conant, Jesse Livezey'
 import argparse, h5py, multiprocessing, sys, os, time
 import numpy as np
 
-from .tokenize import transcripts, make_data
+from ecog.tokenize import transcripts, make_data
 
 
 def main()
