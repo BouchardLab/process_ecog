@@ -19,11 +19,17 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='ecog',
-    description='ECoG decoding project.',
+    description='ECoG preprocessing scripts.',
     long_description=long_description,
     author='Jesse Livezey',
-    author_email='jesse.livezey@berkeley.edu'
-)
+    author_email='jesse.livezey@berkeley.edu',
+
+    install_requires = [
+      'h5py',
+      'numpy',
+      'scipy',
+      'pyfftw']
+    )
 """
 # To provide executable scripts, use entry points in preference to the
 # "scripts" keyword. Entry points provide cross-platform support and allow

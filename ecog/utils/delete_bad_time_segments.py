@@ -1,0 +1,34 @@
+from __future__ import division
+import numpy as np
+from scipy.io import loadmat
+
+__authors__ = "Alex Bujan"
+
+def delete_bad_time_segments(X, rate, matFile):
+    """
+    Deletes time sections of data containing artifacts.
+    
+    Parameters
+    ----------
+    X : array
+        Bad data, dimensions (n_channels, n_timePoints)
+    rate : float
+        Number of samples per second
+    matFile : string
+        Path to a mat file with the info about badSegmts
+
+    Returns
+    -------
+    X : array
+        Artifact-free data
+    """
+
+    bad_segmts = loadmat(matFile)['badTimeSegments']
+    T = np.arange(X.shape[1])/rate
+    bp = np.searchsorted(T, badSegmts)
+    ids = []
+    for i in xrange(len(bp)):
+        ids.append(np.arange(bp[i,0],bp[i,1]))
+    ids = np.concatenate(ids)
+    X = np.delete(X,ids,1)
+    return X
