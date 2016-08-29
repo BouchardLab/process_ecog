@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 
-lab_time_conversion = 1.e7
+lab_time_conversion = 1e7
 
 def parse(blockpath, blockname):
     """
@@ -145,6 +145,27 @@ def parse_Lab(fname):
         position : the position of each phoneme within the word
     """
 
+    def clean_tokens(token):
+        if token == 'ra':
+            return 'raa'
+        return token
+
+    def split_token(token):
+        m = re.search('\d', token)
+        if m:
+            m = m.start()
+            token_text = token[:m]
+            token_num = token[m]
+        else:
+            token_text = token[:-1]
+            token_num = None
+
+        token_text = clean_tokens(token_text)
+        token_consonant = token_text[:-2]
+        token_vowel = token_text[-2:]
+        return token_text, token_consonant, token_vowel, token_num
+
+
     start = []
     stop  = []
     tier = []
@@ -157,25 +178,27 @@ def parse_Lab(fname):
 
     for ii, line in enumerate(content):
         _, time, token = line.split(' ')
-        isplosive = token[:-4] in ['d','t','b','p','g','k','gh']
-        if (isplosive and '4' in token) or (not isplosive and '3' in token):
+        token_text, token_consonant, token_vowel, token_num = split_token(token)
+
+        isplosive = token_consonant in ['d','t','b','p','g','k','gh']
+        if (isplosive and '4' == token_num) or (not isplosive and '3' == token_num):
             _, start_time, start_token = content[ii-1].split(' ')
             _, stop_time, stop_token = content[ii+1].split(' ')
             # First phoneme
             tier.append('phoneme')
             start.append(float(start_time)/lab_time_conversion)
             stop.append(float(time)/lab_time_conversion)
-            label.append(token[:-4])
+            label.append(token_consonant)
             # Second phoneme
             tier.append('phoneme')
             start.append(float(time)/lab_time_conversion)
             stop.append(float(stop_time)/lab_time_conversion)
-            label.append(token[-4:-2])
+            label.append(token_vowel)
             # Word
             tier.append('word')
             start.append(float(start_time)/lab_time_conversion)
             stop.append(float(stop_time)/lab_time_conversion)
-            label.append(token[:-2] + '2')
+            label.append(token_text + '2')
 
     return format_events(label, start, stop, tier)
 
@@ -242,15 +265,15 @@ def format_events(label, start, stop, tier):
     contains = [-1] * label.size
     position = -1 * np.ones(label.size)
 
-
     # Determine hierarchy of events
     for ind in words:
         position[ind] = 0
         contained_by[ind] = -1;
 
         # Find contained phonemes
-        lower = start[ind] - 0.01
-        upper = stop[ind] + 0.01
+        tol = abs(start[ind]-stop[ind])/10.
+        lower = start[ind] - tol
+        upper = stop[ind] + tol
         startCandidates = np.where(start >= lower)[0]
         stopCandidates = np.where(stop <= upper)[0]
         intersect = np.intersect1d(startCandidates, stopCandidates)
@@ -262,8 +285,8 @@ def format_events(label, start, stop, tier):
 
     for ind in phones:
         # Find phonemes in the same word, position is order in list
-        sameWord = np.where(np.asarray(contained_by) == contained_by[ind])[0]
-        position[ind] = np.where(sameWord == ind)[0]
+        same_word = np.where(np.asarray(contained_by) == contained_by[ind])[0]
+        position[ind] = np.where(same_word == ind)[0]
 
 
     contains = np.asarray(contains, dtype=object)

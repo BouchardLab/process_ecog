@@ -8,7 +8,7 @@ from utils import transcripts, make_data
 
 
 # multiprocessing or python map()
-mp = True
+mp = False
 
 
 def htk_to_hdf5(path, blocks, output_folder=None, task='CV',

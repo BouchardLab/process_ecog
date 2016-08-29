@@ -7,10 +7,10 @@ import scipy as sp
 import scipy.stats as stats
 from scipy.io import loadmat
 
-from scikits.samplerate import resample
+from scipy.signal import resample
 
 import HTK, transcripts, utils
-import .HTK_hilb
+#import .HTK_hilb
 
 def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
               all_event_times=None):
@@ -266,7 +266,7 @@ def load_anatomy(subj_dir):
             anatomy = sp.io.loadmat(anatomy_filename)['anatomy']
             names = anatomy.dtype.names
             for n, labels in zip(names, anatomy[0][0]):
-                electrode_labels[n] = np.array(labels[0])
+                electrode_labels[n] = np.array(labels).ravel()
         except ValueError:
             with h5py.File(anatomy_filename) as f:
                 for n in f['anatomy'].keys():
@@ -333,7 +333,7 @@ def load_bad_times(blockpath):
             lines = f.readlines()
             for line in lines:
                 if 'e' in line:
-                    start, stop, _, _, _ = line.split(' ')
+                    start, stop = line.split(' ')[:2]
                     bad_times.append([float(start)/lab_time_conversion, float(stop)/lab_time_conversion])
     except IOError:
         return np.array([])
@@ -342,7 +342,7 @@ def load_bad_times(blockpath):
 
     return bad_times
 
-def resample_data(X, ratio=.502):
+def resample_data(X, num=258):
     """
     Resample datapoints and channels.
 
@@ -359,14 +359,5 @@ def resample_data(X, ratio=.502):
         Resampled data array.
     """
     n_batch, n_time, n_channels = X.shape
-    n_time, = resample(np.zeros(n_time), ratio, 'sinc_best').shape
-    resampled_X = utils.nans((n_batch, n_time, n_channels))
-    
-    for ii in range(n_batch):
-        for jj in range(n_channels):
-            if np.isnan(X[ii, :, jj]).sum() == 0:
-                resampled_X[ii, :, jj] = resample(X[ii, :, jj], ratio, 'sinc_best')
-            else:
-                pass
-
+    resampled_X = resample(X, num, axis=1)
     return resampled_X
