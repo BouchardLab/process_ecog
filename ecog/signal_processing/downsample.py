@@ -3,8 +3,8 @@ import numpy as np
 from scipy.signal import resample
 try:
     from tqdm import tqdm
-except:
-    tqdn = lambda x, *args, **kwargs: x
+except ImportError:
+    tqdm = lambda x, *args, **kwargs: x
 
 __authors__ = "Alex Bujan"
 

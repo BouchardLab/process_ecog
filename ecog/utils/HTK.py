@@ -163,17 +163,17 @@ def read_HTKs(dir_path, electrodes=None):
     """
 
     num_files = len(os.listdir(dir_path))
-    if electrodes is not None:
+    if electrodes is None:
         electrodes = range(256)
 
-    htkout = read_HTK(os.path.join(dir_path, 'Wav11.htk')
+    htkout = read_HTK(os.path.join(dir_path, 'Wav11.htk'))
     num_fbands, num_samples = htkout['data'].shape
 
     alldata = np.zeros((num_fbands, len(electrodes), num_samples))
 
     for ifile in electrodes:
         htkout = read_HTK(os.path.join(dir_path,
-                                       'Wav{}{}.htk'.format(np.ceil((ifile+1)/64.),
+                                       'Wav{}{}.htk'.format(int(np.ceil((ifile+1)/64.)),
                                                             np.mod(ifile, 64)+1)))
         alldata[:,ifile,:] = htkout['data']
 

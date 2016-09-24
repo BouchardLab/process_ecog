@@ -3,7 +3,7 @@ import numpy as np
 from scipy.signal import firwin2, filtfilt
 try:
     from tqdm import tqdm
-except:
+except ImportError:
     tqdn = lambda x, *args, **kwargs: x
 
 __authors__ = "Alex Bujan"
