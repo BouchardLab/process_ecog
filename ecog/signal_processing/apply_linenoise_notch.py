@@ -1,14 +1,28 @@
 from __future__ import division
+import multiprocessing
 import numpy as np
 from scipy.signal import firwin2, filtfilt
 try:
     from tqdm import tqdm
 except ImportError:
-    tqdn = lambda x, *args, **kwargs: x
+    def tqdm(x, *args, **kwargs):
+        return x
 
 __authors__ = "Alex Bujan"
 
-def apply_linenoise_notch(X, rate):
+
+def apply_notches(args):
+    X, notches, nyquist = args
+    n_taps = 1001
+    gain = [1, 1, 0, 0, 1, 1]
+    for notch in tqdm(notches, 'applying notch filters'):
+        freq = np.array([0, notch-1, notch-.5,
+                         notch+.5, notch+1, nyquist]) / nyquist
+        filt = firwin2(n_taps, freq, gain)
+        X = filtfilt(filt, np.array([1]), X)
+    return X
+
+def apply_linenoise_notch(X, rate, parallel=True):
     """
     Apply Notch filter at 60 Hz and its harmonics
     
@@ -28,12 +42,12 @@ def apply_linenoise_notch(X, rate):
     nyquist = rate/2
     noise_hz   = 60.
     notches = np.arange(noise_hz, nyquist, noise_hz)
+    n_channels, time = X.shape
 
-    for notch in tqdm(notches, 'applying notch filters'):
-        filt = firwin2(1000+1,
-                       np.array([0, notch-1, notch-.5,
-                                 notch+.5, notch+1, nyquist]) / nyquist,
-                       [1,1,0,0,1,1])
-        X = filtfilt(filt, 1, X)
-    return X
-
+    if parallel:
+        pool = multiprocessing.Pool()
+        result = pool.map(apply_notches, [(c, notches, nyquist) for c in X])
+        pool.close()
+        return np.vstack([r[np.newaxis, :] for r in result])
+    else:
+        return apply_notches((X, notches, nyquist))

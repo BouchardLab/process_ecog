@@ -1,4 +1,5 @@
 from __future__ import division
+import multiprocessing
 import numpy as np
 
 try:
@@ -11,16 +12,16 @@ __authors__ = "Alex Bujan, Jesse Livezey"
 
 
 def gaussian(X, rate, center, sd):
-    time_samples = X.shape[-1]
-    freq = fftfreq(time_samples, 1./rate)
+    n_channels, time = X.shape
+    freq = fftfreq(time, 1./rate)
 
     k  = np.exp((-(np.abs(freq)-center)**2)/(2*(sd**2)))
 
     return k
 
 def hamming(X, rate, min_freq, max_freq):
-    time_samples = X.shape[-1]
-    freq = fftfreq(time_samples, 1./rate)
+    n_channels, time = X.shape
+    freq = fftfreq(time, 1./rate)
 
     pos_in_window = np.logical_and(freq >= min_freq, freq <= max_freq)
     neg_in_window = np.logical_and(freq <= -min_freq, freq >= -max_freq)
@@ -35,8 +36,16 @@ def hamming(X, rate, min_freq, max_freq):
 
     return k
 
+def transform(args):
+    X, h, kernel = args
+    # Compute analytical signal
+    if kernel is None:
+        Xc = ifft(fft(X)*h)
+    else:
+        Xc = ifft(fft(X)*h*kernel)
+    return Xc
 
-def apply_hilbert_transform(X, rate, kernel=None):
+def apply_hilbert_transform(X, rate, kernel=None, parallel=True):
     """
     Apply bandpass filtering with Hilbert transform using
     a prespecified kernel.
@@ -58,18 +67,19 @@ def apply_hilbert_transform(X, rate, kernel=None):
         Bandpassed analytical signal (dtype: complex)
     """
 
-    time_samples = X.shape[-1]
-    freq = fftfreq(time_samples, 1./rate)
+    n_channels, time = X.shape
+    freq = fftfreq(time, 1./rate)
 
     # heaviside kernel
     h = np.zeros(len(freq))
     h[freq > 0]=2.
     h[0]=1.
 
-    # compute analytical signal
-    if kernel is None:
-        Xc = ifft(fft(X)*h)
-    else:
-        Xc = ifft(fft(X)*h*kernel)
 
-    return Xc
+    if parallel:
+        pool = multiprocessing.Pool()
+        result = pool.map(transform, [(c, h, kernel) for c in X])
+        pool.close()
+        return np.vstack([r[np.newaxis, :] for r in result])
+    else:
+        return transform((X, h, kernel))

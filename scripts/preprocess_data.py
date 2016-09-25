@@ -1,13 +1,9 @@
 from __future__ import division
-import os
-import glob
 
+import argparse, glob, h5py, os
 import numpy as np
-import scipy as sp
-import h5py
-import scipy
-from scipy.io import savemat
-import argparse
+from scipy.io import loadmat, savemat
+
 try:
     from tqdm import tqdm
 except:
@@ -29,12 +25,12 @@ __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 def main():
 
     parser = argparse.ArgumentParser(description='Preprocessing ecog data.')
+    parser.add_argument('path', type=str, help="Path to the data")
     parser.add_argument('subject', type=str, help="Subject code")
     parser.add_argument('blocks', type=int, nargs='+',
                         help="Block number eg: '1'")
-    parser.add_argument('path', type=str, help="Path to the data")
     parser.add_argument('-r', '--rate', type=float, default=200.,
-        help="Sampling rate of the processed signal (optional)")
+                        help="Sampling rate of the processed signal (optional)")
     parser.add_argument('--vsmc', default=False, action='store_true',
                         help="Include vSMC electrodes only (optional)")
     parser.add_argument('--cfs', type=float, default=None,
@@ -56,7 +52,7 @@ def main():
 
 
 def transform(block_path, rate=400., vsmc=False, cfs=None, sds=None, srf=1e4,
-              neuro=False, suffix=''):
+              neuro=False, suffix='', total_channels=256):
     """
     Takes raw LFP data and does the standard hilb algorithm:
     1) CAR
@@ -107,42 +103,32 @@ def transform(block_path, rate=400., vsmc=False, cfs=None, sds=None, srf=1e4,
 
     # first, look for downsampled ECoG in block folder
     ds_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.mat')
-    print('Loading raw data')
+    print('Loading raw data from:\n{}'.format(block_path))
     try:
-        print 1
-        # New .mat format
+        # HDF5 .mat format
         with h5py.File(ds_ecog_path, 'r') as f:
             X = f['ecogDS']['data'][:].T
             fs = f['ecogDS']['sampFreq'][0]
     except IOError:
         try:
-            raise IOError
-            print 2
             # Old .mat format
-            data = sp.io.loadmat(ds_ecog_path)
-            print data.keys()
-            print data['ecogDS'].shape
-            print data['ecogDS'].keys()
-            X = data['ecogDS']['data'][:].T
-            fs = data['ecogDS']['sampFreq'][0]
+            data = loadmat(ds_ecog_path)
+            X = data['ecogDS'].item()[0]
+            fs = data['ecogDS'].item()[3]
         except IOError:
-            print 3
             # Load raw HTK files
             rd_path = os.path.join(block_path, 'RawHTK')
-            print rd_path
             HTKoutR = HTK.read_HTKs(rd_path)
             X = HTKoutR['data']
-
-            """
-            Downsample to 400 Hz
-            """
+            # Downsample to 400 Hz
             X = dse.downsample_ecog(X, rate, HTKoutR['sampling_rate'] / srf)
 
             os.mkdir(os.path.join(block_path, 'ecog400'))
             savemat(ds_ecog_path, {'ecogDS':{'data': X, 'sampFreq': rate}})
 
+    assert X.shape[0] == total_channels
+
     print X.shape
-    assert False
 
     bad_elects = load_bad_electrodes(block_path)
     if len(bad_elects) > 0:
@@ -181,7 +167,7 @@ def transform(block_path, rate=400., vsmc=False, cfs=None, sds=None, srf=1e4,
                                          'float32', compression="gzip")
             for ii, (min_f, max_f) in enumerate(tqdm(zip(min_freqs, max_freqs),
                                                 'applying Hilbert transform',
-                                                total=len(batch))):
+                                                total=len(min_freqs))):
                 kernel = hamming(X, rate, min_f, max_f)
                 dat = aht.apply_hilbert_transform(X, rate, kernel)
                 dset_real[ii] = dat.real.astype('float32')
