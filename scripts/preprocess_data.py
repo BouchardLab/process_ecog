@@ -29,7 +29,7 @@ def main():
     parser.add_argument('subject', type=str, help="Subject code")
     parser.add_argument('blocks', type=int, nargs='+',
                         help="Block number eg: '1'")
-    parser.add_argument('-r', '--rate', type=float, default=200.,
+    parser.add_argument('-r', '--rate', type=float, default=400.,
                         help="Sampling rate of the processed signal (optional)")
     parser.add_argument('--vsmc', default=False, action='store_true',
                         help="Include vSMC electrodes only (optional)")
@@ -102,33 +102,57 @@ def transform(block_path, rate=400., vsmc=False, cfs=None, sds=None, srf=1e4,
     subj_path, blockname = os.path.split(block_path)
 
     # first, look for downsampled ECoG in block folder
-    ds_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.mat')
+    h5_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.h5')
+    mat_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.mat')
     print('Loading raw data from:\n{}'.format(block_path))
     try:
-        # HDF5 .mat format
-        with h5py.File(ds_ecog_path, 'r') as f:
-            X = f['ecogDS']['data'][:].T
-            fs = f['ecogDS']['sampFreq'][0]
+        mode = 0
+        # HDF5 format
+        with h5py.File(h5_ecog_path, 'r') as f:
+            X = f['ecogDS']['data'].value
+            fs = f['ecogDS']['sampFreq'].value
     except IOError:
+        mode = 1
         try:
-            # Old .mat format
-            data = loadmat(ds_ecog_path)
-            X = data['ecogDS'].item()[0]
-            fs = data['ecogDS'].item()[3]
+            # HDF5 .mat format
+            with h5py.File(mat_ecog_path, 'r') as f:
+                X = f['ecogDS']['data'][:].T
+                fs = f['ecogDS']['sampFreq'][0]
         except IOError:
-            # Load raw HTK files
-            rd_path = os.path.join(block_path, 'RawHTK')
-            HTKoutR = HTK.read_HTKs(rd_path)
-            X = HTKoutR['data']
-            # Downsample to 400 Hz
-            X = dse.downsample_ecog(X, rate, HTKoutR['sampling_rate'] / srf)
+            mode = 2
+            try:
+                # Old .mat format
+                X = None
+                fs = None
+                data = loadmat(mat_ecog_path)['ecogDS']
+                for ii, dtn in enumerate(data.dtype.names):
+                    if dtn == 'data':
+                        X = data.item()[ii]
+                    elif dtn == 'sampFreq':
+                        fs = data.item()[ii][0]
+                assert X is not None
+                assert fs is not None
+            except IOError:
+                mode = 3
+                # Load raw HTK files
+                rd_path = os.path.join(block_path, 'RawHTK')
+                HTKoutR = HTK.read_HTKs(rd_path)
+                X = HTKoutR['data']
+                # Downsample to 400 Hz
+                X = dse.downsample_ecog(X, rate, HTKoutR['sampling_rate'] / srf)
 
-            os.mkdir(os.path.join(block_path, 'ecog400'))
-            savemat(ds_ecog_path, {'ecogDS':{'data': X, 'sampFreq': rate}})
+                try:
+                    os.mkdir(os.path.join(block_path, 'ecog400'))
+                except OSError:
+                    pass
+                with h5py.File(h5_ecog_path, 'w') as f:
+                    g = f.create_group('ecogDS')
+                    g.create_dataset('data', data=X)
+                    g.create_dataset('sampFreq', data=rate)
 
-    assert X.shape[0] == total_channels
+    print('Raw data shape: {}'.format(X.shape))
+    assert X.shape[0] == total_channels, (X.shape, mode)
 
-    print X.shape
 
     bad_elects = load_bad_electrodes(block_path)
     if len(bad_elects) > 0:
