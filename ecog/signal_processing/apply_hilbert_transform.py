@@ -3,9 +3,12 @@ import multiprocessing
 import numpy as np
 
 try:
-    from pyfftw.interfaces.numpy_fft import fft, ifft, fftfreq
+    from accelerate.mkl.fftpack import fft, ifft, fftfreq
 except ImportError:
-    from numpy.fft import fft, ifft, fftfreq
+    try:
+        from pyfftw.interfaces.numpy_fft import fft, ifft, fftfreq
+    except ImportError:
+        from numpy.fft import fft, ifft, fftfreq
 
 
 __authors__ = "Alex Bujan, Jesse Livezey"
