@@ -1,14 +1,14 @@
 from __future__ import division
-import multiprocessing
 import numpy as np
+from numpy.fft import fftfreq
 
 try:
-    from accelerate.mkl.fftpack import fft, ifft, fftfreq
+    from accelerate.mkl.fftpack import fft, ifft
 except ImportError:
     try:
-        from pyfftw.interfaces.numpy_fft import fft, ifft, fftfreq
+        from pyfftw.interfaces.numpy_fft import fft, ifft
     except ImportError:
-        from numpy.fft import fft, ifft, fftfreq
+        from numpy.fft import fft, ifft
 
 
 __authors__ = "Alex Bujan, Jesse Livezey"
@@ -77,12 +77,8 @@ def apply_hilbert_transform(X, rate, kernel=None, parallel=True):
     h = np.zeros(len(freq))
     h[freq > 0]=2.
     h[0]=1.
+    h = h[np.newaxis, :]
+    if kernel is not None:
+        kernel = kernel[np.newaxis, :]
 
-
-    if parallel:
-        pool = multiprocessing.Pool()
-        result = pool.map(transform, [(c, h, kernel) for c in X])
-        pool.close()
-        return np.vstack([r[np.newaxis, :] for r in result])
-    else:
-        return transform((X, h, kernel))
+    return transform((X, h, kernel))

@@ -31,8 +31,6 @@ def main():
                         help="Block number eg: '1'")
     parser.add_argument('-r', '--rate', type=float, default=400.,
                         help="Sampling rate of the processed signal (optional)")
-    parser.add_argument('--vsmc', default=False, action='store_true',
-                        help="Include vSMC electrodes only (optional)")
     parser.add_argument('--cfs', type=float, default=None,
                         help="Center frequency of the Gaussian filter (optional)")
     parser.add_argument('--sds', type=float, default=None,
@@ -46,12 +44,12 @@ def main():
     for block in args.blocks:
         block_path = os.path.join(args.path, args.subject,
                 '{}_B{}'.format(args.subject, block))
-        transform(block_path, rate=args.rate, vsmc=args.vsmc,
+        transform(block_path, rate=args.rate,
                   cfs=args.cfs, sds=args.sds,
                   neuro=args.neuro, srf=args.srf)
 
 
-def transform(block_path, rate=400., vsmc=False, cfs=None, sds=None, srf=1e4,
+def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
               neuro=False, suffix='', total_channels=256):
     """
     Takes raw LFP data and does the standard hilb algorithm:
@@ -66,7 +64,6 @@ def transform(block_path, rate=400., vsmc=False, cfs=None, sds=None, srf=1e4,
     ----------
     block_path
     rate
-    vsmc
     cfs: filter center frequencies. If None, use Chang lab defaults
     sds: filer standard deviations. If None, use Chang lab defaults
     srf: htk multiple
@@ -157,14 +154,6 @@ def transform(block_path, rate=400., vsmc=False, cfs=None, sds=None, srf=1e4,
     bad_elects = load_bad_electrodes(block_path)
     if len(bad_elects) > 0:
         X[bad_elects] = np.nan
-
-    # Select electrodes
-    labels = load_electrode_labels(subj_path)
-    if vsmc:
-        elects = np.where((labels == 'precentral') | (labels == 'postcentral'))[0]
-    else:
-        elects = range(256)
-    X = X[elects]
 
     # Subtract CAR
     X = scar.subtract_CAR(X)

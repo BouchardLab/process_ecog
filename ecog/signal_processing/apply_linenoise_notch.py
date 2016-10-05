@@ -1,16 +1,15 @@
-from __future__ import division
-import multiprocessing
+from __future__ import print_function, division
 import numpy as np
 from scipy.signal import firwin2, filtfilt
+from numpy.fft import rfftfreq
 
 try:
-    from accelerate.mkl.fftpack import rfft, irfft, rfftfreq
+    from accelerate.mkl.fftpack import rfft, irfft
 except ImportError:
     try:
-        from pyfftw.interfaces.numpy_fft import fft, ifft, fftfreq
+        from pyfftw.interfaces.numpy_fft import rfft, irfft
     except ImportError:
-        from numpy.fft import fft, ifft, fftfreq
-
+        from numpy.fft import rfft, irfft
 
 try:
     from tqdm import tqdm
@@ -26,6 +25,7 @@ def apply_notches(args, fft=True):
     if fft:
         fs = rfftfreq(X.shape[-1], 1./rate)
         delta = 1.
+        fd = rfft(X)
     else:
         nyquist = rate/2.
         n_taps = 1001
@@ -35,17 +35,17 @@ def apply_notches(args, fft=True):
             window_mask = np.logical_and(fs > notch-delta, fs < notch+delta)
             window_size = window_mask.sum()
             window = np.hamming(window_size)
-            fd = rfft(X)
-            fd[window_mask] = fd[window_mask] * (1.-window)
-            X = irfft(fd)
+            fd[:, window_mask] = fd[:, window_mask] * (1.-window)[np.newaxis, :]
         else:
             freq = np.array([0, notch-1, notch-.5,
                              notch+.5, notch+1, nyquist]) / nyquist
             filt = firwin2(n_taps, freq, gain)
             X = filtfilt(filt, np.array([1]), X)
+    if fft:
+        X = irfft(fd)
     return X
 
-def apply_linenoise_notch(X, rate, parallel=True):
+def apply_linenoise_notch(X, rate):
     """
     Apply Notch filter at 60 Hz and its harmonics
     
@@ -67,10 +67,4 @@ def apply_linenoise_notch(X, rate, parallel=True):
     notches = np.arange(noise_hz, nyquist, noise_hz)
     n_channels, time = X.shape
 
-    if parallel:
-        pool = multiprocessing.Pool()
-        result = pool.map(apply_notches, [(c, notches, rate) for c in X])
-        pool.close()
-        return np.vstack([r[np.newaxis, :] for r in result])
-    else:
-        return apply_notches((X, notches, rate))
+    return apply_notches((X, notches, rate))
