@@ -1,5 +1,6 @@
 #!/bin/bash -l
 #SBATCH -p regular
+#SBATCH --qos=premium
 #SBATCH -N 3
 #SBATCH -t 24:00:00
 #SBATCH -J preprocess_data
