@@ -2,6 +2,16 @@ from __future__ import division
 import multiprocessing
 import numpy as np
 from scipy.signal import firwin2, filtfilt
+
+try:
+    from accelerate.mkl.fftpack import rfft, irfft, rfftfreq
+except ImportError:
+    try:
+        from pyfftw.interfaces.numpy_fft import fft, ifft, fftfreq
+    except ImportError:
+        from numpy.fft import fft, ifft, fftfreq
+
+
 try:
     from tqdm import tqdm
 except ImportError:
@@ -11,15 +21,28 @@ except ImportError:
 __authors__ = "Alex Bujan"
 
 
-def apply_notches(args):
-    X, notches, nyquist = args
-    n_taps = 1001
-    gain = [1, 1, 0, 0, 1, 1]
+def apply_notches(args, fft=True):
+    X, notches, rate = args
+    if fft:
+        fs = rfftfreq(X.shape[-1], 1./rate)
+        delta = 1.
+    else:
+        nyquist = rate/2.
+        n_taps = 1001
+        gain = [1, 1, 0, 0, 1, 1]
     for notch in tqdm(notches, 'applying notch filters'):
-        freq = np.array([0, notch-1, notch-.5,
-                         notch+.5, notch+1, nyquist]) / nyquist
-        filt = firwin2(n_taps, freq, gain)
-        X = filtfilt(filt, np.array([1]), X)
+        if fft:
+            window_mask = np.logical_and(fs > notch-delta, fs < notch+delta)
+            window_size = window_mask.sum()
+            window = np.hamming(window_size)
+            fd = rfft(X)
+            fd[window_mask] = fd[window_mask] * (1.-window)
+            X = irfft(fd)
+        else:
+            freq = np.array([0, notch-1, notch-.5,
+                             notch+.5, notch+1, nyquist]) / nyquist
+            filt = firwin2(n_taps, freq, gain)
+            X = filtfilt(filt, np.array([1]), X)
     return X
 
 def apply_linenoise_notch(X, rate, parallel=True):
@@ -46,8 +69,8 @@ def apply_linenoise_notch(X, rate, parallel=True):
 
     if parallel:
         pool = multiprocessing.Pool()
-        result = pool.map(apply_notches, [(c, notches, nyquist) for c in X])
+        result = pool.map(apply_notches, [(c, notches, rate) for c in X])
         pool.close()
         return np.vstack([r[np.newaxis, :] for r in result])
     else:
-        return apply_notches((X, notches, nyquist))
+        return apply_notches((X, notches, rate))
