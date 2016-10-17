@@ -1,4 +1,4 @@
-from __future__ import print_function, division
+from __future__ import division
 import numpy as np
 from scipy.signal import firwin2, filtfilt
 from numpy.fft import rfftfreq
@@ -62,7 +62,7 @@ def apply_linenoise_notch(X, rate):
         Denoised data, dimensions (n_channels, n_timePoints)
     """
 
-    nyquist = rate/2
+    nyquist = rate / 2
     noise_hz   = 60.
     notches = np.arange(noise_hz, nyquist, noise_hz)
     n_channels, time = X.shape

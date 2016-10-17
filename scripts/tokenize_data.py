@@ -1,31 +1,36 @@
 #!/usr/bin/env python
-__author__ = 'David Conant, Jesse Livezey'
-
-import argparse, h5py, multiprocessing, sys, os, time
+from __future__ import print_function, division
+import argparse, h5py, multiprocessing, os, time
 import numpy as np
+import pandas as pd
 
 from ecog.tokenize import transcripts, make_data
+from ecog.utils import bands
+
+__author__ = 'David Conant, Jesse Livezey'
 
 
-def main()
-    parser = argparse.ArgumentParser(description='Preprocess ECoG Data')
+def main():
+    parser = argparse.ArgumentParser(description='Tokenize ECoG Data')
     parser.add_argument('path', help='path to subject folder')
     parser.add_argument('blocks', nargs='+', type=str)
     parser.add_argument('-o', '--output_folder', default=None)
     parser.add_argument('-t', '--task', default='CV')
-    parser.add_argument('-w', '--align_window', nargs=2, type=float, default=[-.5, .79])
+    parser.add_argument('-w', '--align_window', nargs=2, type=float,
+                        default=[-.5, .79])
     parser.add_argument('-p', '--align_pos', type=int, default=1)
     parser.add_argument('-d', '--data_type', default='HG')
-    parser.add_argument('-b', '--zscore', default='events')
-    parser.add_argument('-m', '--mp', default=True)
+    parser.add_argument('-b', '--zscore', default='between_data')
+    parser.add_argument('-m', '--mp', action='store_true', default=False)
     parser.add_argument('-f', '--fband', type=int, default=18)
     args = parser.parse_args()
     htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
                 args.align_window, args.align_pos, args.data_type, args.zscore,
                 args.fband, args.mp)
 
+
 def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
-                align_window=None, align_pos = 0,
+                align_window=None, align_pos=0,
                 data_type='HG', zscore='events',
                 fband=None, mp=True):
     """
@@ -61,22 +66,28 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     if output_folder is None:
         output_folder = path
 
+    tasks = ['CV']
     if task == 'CV':
-        tokens = sorted(['baa', 'bee', 'boo', 'daa', 'dee', 'doo', 'faa', 'fee', 'foo',
-                         'gaa', 'gee', 'goo', 'haa', 'hee', 'hoo', 'kaa', 'kee', 'koo',
-                         'laa', 'lee', 'loo', 'maa', 'mee', 'moo', 'naa', 'nee', 'noo',
-                         'paa', 'pee', 'poo', 'raa', 'ree', 'roo', 'saa', 'shaa', 'shee',
-                         'shoo', 'see', 'soo', 'taa', 'thaa', 'thee', 'thoo', 'tee',
-                         'too', 'vaa', 'vee', 'voo', 'waa', 'wee', 'woo','yaa','yee',
-                         'yoo', 'zaa', 'zee', 'zoo'])
+        tokens = sorted(['baa', 'bee', 'boo', 'daa', 'dee', 'doo', 'faa',
+                         'fee', 'foo', 'gaa', 'gee', 'goo', 'haa', 'hee',
+                         'hoo', 'kaa', 'kee', 'koo', 'laa', 'lee', 'loo',
+                         'maa', 'mee', 'moo', 'naa', 'nee', 'noo', 'paa',
+                         'pee', 'poo', 'raa', 'ree', 'roo', 'saa', 'shaa',
+                         'shee', 'shoo', 'see', 'soo', 'taa', 'thaa', 'thee',
+                         'thoo', 'tee', 'too', 'vaa', 'vee', 'voo', 'waa',
+                         'wee', 'woo', 'yaa', 'yee', 'yoo', 'zaa', 'zee',
+                         'zoo'])
     else:
-        raise ValueError("task must of one of ['CV']: "+str(task)+'.')
+        raise ValueError('Task must of one of {}: {}'.format(tasks, task))
 
-    if data_type not in ['HG','AS_I','AS_R','AS_AA']:
-        raise ValueError("data_type must be one of ['HG','AS_I','AS_R']: "+str(data_type)+'.')
+    data_types = ['HG', 'AS_I', 'AS_R', 'AS_AA', 'neuro']
+    if data_type not in data_types:
+        raise ValueError('Data_type must be one of {}: {}'.format(data_types,
+                                                                  data_type))
 
-    if fband==None and 'AS' in data_type:
-        raise ValueError("Specify the frequency band with data_type AS_I or AS_R")
+    if fband is None and 'AS' in data_type:
+        raise ValueError('Specify the frequency band with ' +
+                         'data_type AS_I or AS_R')
 
     if align_window is None:
         align_window = np.array([-1., 1.])
@@ -93,56 +104,53 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         return rval
 
     def align_window_str(align_window):
-        rval = 'align_window_' + str(align_window[0]) + '_to_'+ str(align_window[1])
+        rval = 'align_window_{}_to_{}'.format(align_window[0], align_window[1])
         return rval
 
     folder, subject = os.path.split(os.path.normpath(path))
-    if fband==None:
-        fname = os.path.join(output_folder, 'hdf5', (subject + '_' + block_str(blocks)
-                                           + task + '_' + data_type + '_'
-                                           + align_window_str(align_window) + '_'
-                                           + zscore + '.h5'))
+    if fband is None:
+        fname = os.path.join(output_folder, 'hdf5',
+                             (subject + '_' + block_str(blocks) +
+                              task + '_' + data_type + '_' +
+                              align_window_str(align_window) + '_' +
+                              zscore + '.h5'))
     else:
-        fname = os.path.join(output_folder, 'hdf5', (subject + '_' + block_str(blocks)
-                                           + task + '_' + data_type + '_'
-                                           + str(fband) + '_'
-                                           + align_window_str(align_window) + '_'
-                                           + zscore + '.h5'))
+        fname = os.path.join(output_folder, 'hdf5',
+                             (subject + '_' + block_str(blocks) +
+                              task + '_' + data_type + '_' +
+                              str(fband) + '_' +
+                              align_window_str(align_window) + '_' +
+                              zscore + '.h5'))
 
     anat = make_data.load_anatomy(path)
 
-    D = dict((token, np.array([])) for token in tokens)
+    D = dict((token, np.array([], dtype=np.complex)) for token in tokens)
     stop_times = dict((token, np.array([])) for token in tokens)
     start_times = dict((token, np.array([])) for token in tokens)
-    B = dict((token, np.array([],dtype='int')) for token in tokens)
+    B = dict((token, np.array([], dtype='int')) for token in tokens)
+    fs = []
 
-    args = [(subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband)
-            for block in blocks]
-    print '\nNumbers of blocks to be processed: %i'%(len(blocks))
+    blocks = [int(block) for block in blocks]
+    args = [(subject, block, path, tokens, align_pos,
+             align_window, data_type, zscore, fband) for block in blocks]
+    print('Numbers of blocks to be processed: {}'.format(len(blocks)))
 
-    if mp and len(blocks)>1:
+    if mp and len(blocks) > 1:
         pool = multiprocessing.Pool(len(blocks))
-        print '\nProcessing blocks in parallel with %i processes...'%(pool._processes)
+        print('Processing blocks in parallel ' +
+              'with {} processes...'.format(pool._processes))
         results = pool.map(process_block, args)
     else:
-        print '\nProcessing blocks serially ...'
+        print('Processing blocks serially ...')
         results = map(process_block, args)
 
-    for Bstart, Bstop, BD, Bnumber in results:
-        for token in tokens:
-            start_times[token] = (np.hstack((start_times[token], Bstart[token])) if
-                                  start_times[token].size else Bstart[token])
-            stop_times[token] = (np.hstack((stop_times[token], Bstop[token])) if
-                                 stop_times[token].size else Bstop[token])
-            D[token] = (np.vstack((D[token], BD[token])) if
-                        D[token].size else BD[token])
-            B[token] = (np.hstack((B[token], Bnumber[token])) if
-                        B[token].size else Bnumber[token])
+    data, event_labels, Bnumber, block_fs = results
 
-    print('\nSaving to: '+fname)
-    save_hdf5(fname, D, tokens, anat, B)
+    print('Saving to: {}'.format(fname))
+    save_hdf5(fname, data, event_labels, tokens, anat, B, fs, data_type)
 
-    return (D, anat, start_times, stop_times, B)
+    return (D, anat, start_times, stop_times, B, fs)
+
 
 def process_block(args):
     """
@@ -155,7 +163,8 @@ def process_block(args):
     path : str
     tokens : list of str
     """
-    subject, block, path, tokens, align_pos, align_window, data_type, zscore, fband = args
+    (subject, block, path, tokens, align_pos, align_window,
+     data_type, zscore, fband) = args
 
     try:
         process = multiprocessing.current_process()
@@ -163,74 +172,66 @@ def process_block(args):
     except:
         rank = 0
 
-    blockname = subject + '_' + block
-    if rank==0:
-        print('\nProcessing subject %s'%subject)
+    blockname = '{}_B{}'.format(subject, block)
+    if rank == 0:
+        print('Processing subject {}'.format(subject))
         print('-----------------------')
     blockpath = os.path.join(path, blockname)
 
-    if rank==0:
-        print('\nConvert parseout to dataframe ...')
+    if rank == 0:
+        print('Convert parseout to dataframe ...')
     # Convert parseout to dataframe
     parseout = transcripts.parse(blockpath, blockname)
     df = transcripts.make_df(parseout, block, subject, align_pos)
-    if rank==0:
-        print('\nDataframe generated succesfully!')
+    if rank == 0:
+        print('Dataframe generated succesfully!')
 
-
-    D = dict()
-    stop_times = dict()
-    start_times = dict()
-    B = dict()
-
-    all_event_times = np.array([])
+    all_event_times = None
     for token in tokens:
         match = (df['label'] == token)
-        all_event_times = (np.hstack((all_event_times,
-                                      df['align'][match & (df['mode'] == 'speak')]))
-                           if all_event_times.size else df['align'][match & (df['mode'] == 'speak')])
+        temp_event_times = df['align'][match & (df['mode'] == 'speak')]
+        if all_event_times is None:
+            all_event_times = temp_event_times
+        else:
+            all_event_times = np.hstack((all_event_times,
+                                         temp_event_times))
 
-    if rank==0:
-        print('\nGenerating data matrices ...')
-        count=1
+    if rank == 0:
+        print('Generating data matrices ...')
         tic = time.time()
 
-    for token in tokens:
+    event_times = None
+    event_labels = None
+    for ii, token in enumerate(sorted(tokens)):
         match = (df['label'] == token)
-        event_times = df['align'][match & (df['mode'] == 'speak')]
-        start = event_times.values + align_window[0]
-        stop = event_times.values + align_window[1]
 
-        start_times[token] = start.astype(float)
-        stop_times[token] = stop.astype(float)
+        temp_times = df['align'][match & (df['mode'] == 'speak')]
+        if event_times is None:
+            event_times = temp_times
+        else:
+            event_times = pd.concat([event_times, temp_times])
 
-        if rank==0:
-            tictic = time.time()
+        temp_labels = np.full(temp_times.shape[0], ii, dtype=int)
+        if event_labels is None:
+            event_labels = temp_labels
+        else:
+            event_labels = np.concatenate((event_labels, temp_labels))
 
-        data = make_data.run_makeD(blockpath, event_times, align_window,
-                                   data_type, zscore, all_event_times, fband)
+    data, fs = make_data.run_extract_windows(blockpath, event_times,
+                                             align_window, data_type,
+                                             zscore, all_event_times, fband)
+    for k, v in data.iteritems():
+        assert v.shape[0] == event_labels.shape[0], ('shapes', k, v.shape, event_labels.shape)
+    bn = np.full(data.values()[0].shape[0], block, dtype=int)
 
-#        resampled_data = make_data.resample_data(data)
-#        D[token] = resampled_data
+    if rank == 0:
+        toc = time.time() - tic
+        print('Data generated succesfully in {.2f} seconds'.format(toc))
 
-        D[token] = data
-
-        B[token] = np.ones(data.shape[0],dtype='int')*block
+    return (data, event_labels, bn, fs)
 
 
-        if rank==0:
-            toctoc = time.time()-tictic
-            print('\n-->Data matrix %i/%i done in %.2f seconds'%(count,len(tokens),toctoc))
-            print '\n-->Estimated remaining time: %.2f seconds'%(toctoc*(len(tokens)-count))
-            count+=1
-
-    if rank==0:
-        toc = time.time()-tic
-        print '\nData generated succesfully in %.2f seconds'%toc
-
-    return (start_times, stop_times, D, B)
-
-def save_hdf5(fname, D, tokens, anat, B):
+def save_hdf5(fname, data, event_labels, tokens, anat, bn, fs, data_type):
     """
     Save processed data to hdf5.
 
@@ -244,42 +245,42 @@ def save_hdf5(fname, D, tokens, anat, B):
         Tokens to save from D.
     """
     tokens = sorted(tokens)
-    labels = np.array(range(len(tokens)))
-    X = None
-    y = None
-    bn = None
-    for label, token in zip(labels, tokens):
-        X_t = D[token]
-        if X is None:
-            X = X_t
-        else:
-            X = np.vstack((X, X_t))
-        if y is None:
-            y = label * np.ones(X_t.shape[0], dtype=int)
-        else:
-            y = np.hstack((y, label * np.ones(X_t.shape[0], dtype=int)))
-
-        bn_t = B[token]
-        if bn is None:
-           bn = bn_t
-        else:
-           bn = np.hstack((bn,bn_t))
-
     folder, f = os.path.split(fname)
 
     try:
         os.mkdir(folder)
     except OSError:
         pass
-
-    with h5py.File(fname, 'w') as f:
-        f.create_dataset('X', data=X.astype('float32'))
-        f.create_dataset('y', data=y)
-        f.create_dataset('block', data=bn)
-        f.create_dataset('tokens', data=tokens)
-        grp = f.create_group('anatomy')
-        for key in sorted(anat.keys()):
-            grp.create_dataset(key, data=anat[key])
+    fname_tmp = fname + '.tmp'
+    if data_type == 'neuro':
+        neuro_bands = bands.neuro['bands']
+        min_freqs = bands.neuro['min_freqs']
+        max_freqs = bands.neuro['max_freqs']
+        with h5py.File(fname_tmp, 'w') as f:
+            for b, d in D.iteritems():
+                dset = f.create_dataset('X'+b, data=d)
+                dset.dims[0].label = 'batch'
+                dset.dims[2].label = 'electrode'
+                dset.dims[3].label = 'time'
+            f.create_dataset('y', data=event_labels)
+            f.create_dataset('block', data=bn)
+            f.create_dataset('tokens', data=tokens)
+            f.create_dataset('min_freqs', data=np.array(min_freqs))
+            f.create_dataset('max_freqs', data=np.array(max_freqs))
+            f.create_dataset('bands', data=np.array(neuro_bands))
+            grp = f.create_group('anatomy')
+            for key in sorted(anat.keys()):
+                grp.create_dataset(key, data=anat[key])
+    else:
+        with h5py.File(fname_tmp, 'w') as f:
+            f.create_dataset('X', data=X.astype('float32'))
+            f.create_dataset('y', data=y)
+            f.create_dataset('block', data=bn)
+            f.create_dataset('tokens', data=tokens)
+            grp = f.create_group('anatomy')
+            for key in sorted(anat.keys()):
+                grp.create_dataset(key, data=anat[key])
+    os.rename(fname_tmp, fname)
 
 
 if __name__ == "__main__":

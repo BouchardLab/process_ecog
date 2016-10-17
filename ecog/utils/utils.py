@@ -9,8 +9,7 @@ def nans(shape, dtype=float):
     :param dtype:
     :return:
     """
-    a = np.empty(shape, dtype)
-    a.fill(np.nan)
+    a = np.full(shape, np.nan, dtype)
     return a
 
 def is_overlap(time_window, time_windows_array):
@@ -45,10 +44,9 @@ def is_in(tt, tbounds):
     :return:        1 x n bool          logical indicating if time is in any of the windows
     """
 
-    #check if tbounds in np.array and if not fix it
     tbounds = np.array(tbounds)
 
-    tf = np.zeros(tt.shape, dtype = 'bool')
+    tf = np.zeros(tt.shape, dtype=bool)
 
     if tbounds.ndim is 1:
         tf = (tt > tbounds[0]) & (tt < tbounds[1])

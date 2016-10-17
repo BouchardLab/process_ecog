@@ -30,7 +30,6 @@ def parse(blockpath, blockname):
         contained_by : an array specifying the words contiaining each event
         position : the position of each phoneme within the word
     """
-
     textgrid_path = os.path.join(blockpath, blockname + '_transcription_final.TextGrid')
     lab_path = os.path.join(blockpath, blockname + '_transcription_final.lab')
     if os.path.isfile(textgrid_path):

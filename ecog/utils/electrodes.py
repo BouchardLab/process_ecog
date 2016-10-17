@@ -1,6 +1,5 @@
 from __future__ import division
-import os
-import glob
+import glob, h5py, os
 
 import numpy as np
 from scipy.io import loadmat
@@ -55,7 +54,7 @@ def load_electrode_labels(subj_dir):
             with h5py.File(anatomy_filename[0], 'r') as f:
                 anatomy = f['anatomy']
                 for key in anatomy.keys():
-                    electrode_labsls[anatomy[key]-1] = key
+                    electrode_labels[anatomy[key]-1] = key
         electrode_labels = np.array([word.decode("utf-8") for word in electrode_labels])
 
 

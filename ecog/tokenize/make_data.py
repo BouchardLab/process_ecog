@@ -1,18 +1,22 @@
-__author__ = 'David Conant, Jesse Livezey'
-
-import csv, glob, h5py, multiprocessing, os, pdb
+from __future__ import division
+import csv, glob, h5py, multiprocessing, os
 
 import numpy as np
 import scipy as sp
-import scipy.stats as stats
 from scipy.io import loadmat
 
-import ..utils
-from ..utils import transcripts
+from ..signal_processing import resample
+from ..utils import bands, HTK, utils
+from ..utils.electrodes import load_bad_electrodes
+import transcripts
+
+__author__ = 'David Conant, Jesse Livezey'
+
+srf = HTK.SAMPLING_RATE_FACTOR
 
 
-def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
-              all_event_times=None,fband=None):
+def run_extract_windows(blockpath, event_times, align_window, data_type, zscore_mode='events',
+                        all_event_times=None,fband=None):
     """
     Extract requested data type.
 
@@ -26,51 +30,53 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
         Window around event alignment.
     data_type : str
         Data type (e.g. 'HG', 'form').
-    zscore : str
+    zscore_mode : str
         Method for zscoring data.
     """
+
+    def neuro():
+        bad_electrodes = load_bad_electrodes(blockpath) -1
+        bad_times = load_bad_times(blockpath)
+        hg, fs = load_neuro(blockpath)
+        hg = hg[..., :256, :]
+
+        neuro_bands = bands.neuro['bands']
+        min_freqs = bands.neuro['min_freqs']
+        max_freqs = bands.neuro['max_freqs']
+        HG_freq = bands.neuro['HG_freq']
+
+        D = dict()
+        final_fs = dict()
+        for b, minf, maxf, d in zip(neuro_bands, min_freqs, max_freqs, hg):
+            target_fs = HG_freq * (maxf + minf) / (max_freqs[-1] + min_freqs[-1])
+            if np.allclose(target_fs, fs):
+                hg_b = d
+            else:
+                hg_b = resample.resample_ecog(d, target_fs, fs)
+            hg_b = zscore(hg_b, sampling_rate=target_fs, bad_times=bad_times,
+                          align_window=align_window, mode=zscore_mode,
+                          all_event_times=all_event_times)
+            D[b] = extract_windows(hg_b, target_fs, event_times, align_window,
+                                   bad_times=bad_times, bad_electrodes=bad_electrodes)
+            final_fs[b] = target_fs
+
+        return D, final_fs
 
     def HG():
         bad_electrodes = load_bad_electrodes(blockpath) -1
         bad_times = load_bad_times(blockpath)
-        hg, fs_hg = load_HG(blockpath)
+        hg, fs = load_HG(blockpath)
 
-        hg = hg[:256]
+        hg = hg[..., :256, :]
 
-        if zscore == 'whole':
-            hg = stats.zscore(hg, axis=1)
-        elif zscore == 'data':
-            tt_data = np.arange(hg.shape[1]) / fs_hg
-            data_start = all_event_times.min() + align_window[0]
-            data_stop = all_event_times.max() + align_window[1]
-            data_time = utils.isin(tt_data, np.array([data_start, data_stop]))
-            for bt in bad_times:
-                data_time = data_time & ~utils.isin(tt_data, bt)
-            data = hg[:, data_time]
-            means = data.mean(axis=1, keepdims=True)
-            stds = data.std(axis=1, keepdims=True)
-            hg = (hg - means)/stds
-        elif zscore == 'events':
-            tt_data = np.arange(hg.shape[1]) / fs_hg
-            data_time = np.zeros_like(tt_data).astype(bool)
-            for et in all_event_times:
-                data_time = data_time | utils.isin(tt_data, et + align_window)
-            for bt in bad_times:
-                data_time = data_time & ~utils.isin(tt_data, bt)
-            data = hg[:, data_time]
-            means = data.mean(axis=1, keepdims=True)
-            stds = data.std(axis=1, keepdims=True)
-            hg = (hg - means) / stds
-        elif ((zscore is None) or (zscore.lower() == 'none')):
-            pass
-        else:
-            raise ValueError('zscore type {} not recognized.'.format(zscore))
+        hg = zscore(hg, sampling_rate=fs, bad_times=bad_times,
+                    align_window=align_window, mode=zscore_mode,
+                    all_event_times=all_event_times)
 
-
-        D = makeD(hg, fs_hg, event_times, align_window,
+        D = extract_windows(hg, fs, event_times, align_window,
                   bad_times=bad_times, bad_electrodes=bad_electrodes)
 
-        return D
+        return D, fs
 
     def AS():
         global rank
@@ -82,7 +88,7 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
 
 
         if rank==0:
-            print('\nLoading electrodes ...')
+            print('Loading electrodes ...')
 
         bad_electrodes = load_bad_electrodes(blockpath) -1
         bad_times = load_bad_times(blockpath)
@@ -90,87 +96,106 @@ def run_makeD(blockpath, event_times, align_window, data_type, zscore='events',
         part = data_type.split('_')[-1]
 
         if rank==0:
-            print('\nLoading AS ...')
+            print('Loading AS ...')
 
         s, fs = load_AS(blockpath,part,fband)
 
         if rank==0:
-            print('\nLoading AS done!')
-            print('\nZ-scoring with mode: %s'%zscore)
+            print('Loading AS done!')
+            print('Z-scoring with mode: %s'%zscore_mode)
 
-        s = zscoreD(data=s,sampling_rate=fs,bad_times=bad_times,\
-                    align_window=align_window,mode=zscore,\
+        s = zscore(data=s,sampling_rate=fs,bad_times=bad_times,\
+                    align_window=align_window,mode=zscore_mode,\
                     all_event_times=all_event_times)
 
         if rank==0:
-            print('\nMaking D ...')
+            print('Making D ...')
 
-        D = makeD(s, fs, event_times, align_window,
+        D = extract_windows(s, fs, event_times, align_window,
                   bad_times=bad_times, bad_electrodes=bad_electrodes)
 
         if rank==0:
-            print('\nD done!')
+            print('D done!')
 
-        return D
+        return D, fs
 
     def form():
+        raise NotImplementedError
         F = load_form(blockpath)
-        D = makeD(F, 100, times, align_window, bad_times=np.array([]), bad_electrodes=np.array([]))
+        D = extract_windows(F, 100, times, align_window, bad_times=np.array([]), bad_electrodes=np.array([]))
+        fs = None
 
-        return D
+        return D, fs
 
 
     options = {'HG' : HG,
                'form' : form,
                'AS_I' : AS,
                'AS_R' : AS,
-               'AS_AA': AS,}
+               'AS_AA': AS,
+               'neuro': neuro}
 
-    D = options[data_type]()
+    return options[data_type]()
 
-    return D
+def zscore(data, axes=-1, mode=None, sampling_rate=None, bad_times=None,
+           align_window=None, all_event_times=None):
 
-def zscoreD(data,sampling_rate,bad_times,align_window,mode='events',\
-            all_event_times=None):
+    if mode is None:
+        mode = 'events'
 
     if mode == 'whole':
-        data = stats.zscore(data, axis=1)
-    elif mode == 'data':
-        tt_data = np.arange(data.shape[1]) / sampling_rate
+        mean = data.mean(axis=axes, keepdims=True)
+        std = data.std(axis=axes, keepdims=True)
+    elif mode == 'between_data':
+        tt_data = np.arange(data.shape[-1]) / sampling_rate
         data_start = all_event_times.min() + align_window[0]
         data_stop = all_event_times.max() + align_window[1]
-        data_time = utils.isin(tt_data, np.array([data_start, data_stop]))
+        data_time = utils.is_in(tt_data, np.array([data_start, data_stop]))
         for bt in bad_times:
-            data_time = data_time & ~utils.isin(tt_data, bt)
-        tmp   = data[:, data_time]
-        means = tmp.mean(axis=1, keepdims=True)
-        stds  = tmp.std(axis=1, keepdims=True)
-        data  = (data - means)/stds
+            data_time = data_time & ~utils.is_in(tt_data, bt)
+        for et in all_event_times:
+            data_time = data_time & ~utils.is_in(tt_data, et + align_window)
+        tmp   = data[..., data_time]
+        means = tmp.mean(axis=axes, keepdims=True)
+        stds  = tmp.std(axis=axes, keepdims=True)
+    elif mode == 'data':
+        tt_data = np.arange(data.shape[-1]) / sampling_rate
+        data_start = all_event_times.min() + align_window[0]
+        data_stop = all_event_times.max() + align_window[1]
+        data_time = utils.is_in(tt_data, np.array([data_start, data_stop]))
+        for bt in bad_times:
+            data_time = data_time & ~utils.is_in(tt_data, bt)
+        tmp   = data[..., data_time]
+        means = tmp.mean(axis=axes, keepdims=True)
+        stds  = tmp.std(axis=axes, keepdims=True)
     elif mode == 'events':
-        tt_data = np.arange(data.shape[1]) / sampling_rate
+        tt_data = np.arange(data.shape[-1]) / sampling_rate
         data_time = np.zeros_like(tt_data).astype(bool)
         for et in all_event_times:
-            data_time = data_time | utils.isin(tt_data, et + align_window)
+            data_time = data_time | utils.is_in(tt_data, et + align_window)
         for bt in bad_times:
-            data_time = data_time & ~utils.isin(tt_data, bt)
-        tmp   = data[:, data_time]
-        means = tmp.mean(axis=1, keepdims=True)
-        stds  = tmp.std(axis=1, keepdims=True)
-        data  = (data - means) / stds
+            data_time = data_time & ~utils.is_in(tt_data, bt)
+        tmp   = data[..., data_time]
+        means = tmp.mean(axis=axes, keepdims=True)
+        stds  = tmp.std(axis=axes, keepdims=True)
     elif ((mode is None) or (mode.lower() == 'none')):
-        pass
+        return data
     else:
-        raise ValueError('zscore type {} not recognized.'.format(mode))
+        raise ValueError('zscore_mode type {} not recognized.'.format(mode))
+
+    data  = (data - means) / stds
 
     return data
 
-def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_electrodes=None):
+def extract_windows(data, fs_data, event_times, align_window=None,
+                    bad_times=None, bad_electrodes=None):
     """
-    Extracts windows of aligned data. Assumes constant sampling frequency
+    Extracts windows of aligned data. Assumes constant sampling frequency.
+    Assumes last two dimensions of data are electrodes and time.
 
     Parameters
     ----------
-    data : ndarray (n_channels, n_time)
+    data : ndarray (*n_bands*, n_channels, n_time)
         Timeseries data.
     fs_data : float
         Sampling frequency of data.
@@ -185,39 +210,52 @@ def makeD(data, fs_data, event_times, align_window=None, bad_times=None, bad_ele
 
     Returns
     -------
-    D : ndarray (n_events, n_time, n_elects)
+    D : ndarray (n_events, *n_bands*, n_elects, n_time)
         Event data aligned to event times.
     """
+    assert data.ndim in [2, 3], 'Data dim is wrong'
+
     if align_window is None:
         align_window = np.array([-1., 1.])
     else:
         align_window = np.array(align_window)
-        assert align_window[0] <= 0.
-        assert align_window[1] >= 0.
-        assert align_window[0] < align_window[1]
+        assert align_window[0] <= 0., 'align window start'
+        assert align_window[1] >= 0., 'align window end'
+        assert align_window[0] < align_window[1], 'align window order'
+    if bad_times is None:
+        bad_times = np.array([])
+    else:
+        bad_times = np.array(bad_times)
+    if bad_electrodes is None:
+        bad_electrodes = np.array([])
+    else:
+        bad_electrodes = np.array(bad_electrodes)
 
     window_length = int(np.ceil(np.diff(align_window) * fs_data))
     window_start = int(np.floor(align_window[0] * fs_data))
-    D = utils.nans((len(event_times), window_length, data.shape[0]))
-    tt_data = np.arange(data.shape[1]) / fs_data
+    D = utils.nans((len(event_times),) + data.shape[:-1] + (window_length,), dtype=np.complex)
+    tt_data = np.arange(data.shape[-1]) / fs_data
 
     def time_idx(time):
         return int(np.around(time * fs_data))
 
-    for ievent, time in enumerate(event_times):
-        event_data = data[:, time_idx(time) + window_start:time_idx(time) + window_start + window_length].T
-        assert event_data.shape[0] == D.shape[1]
-        D[ievent] = event_data
+    for ii, time in enumerate(event_times):
+        sl = slice(time_idx(time) + window_start, time_idx(time) + window_start + window_length)
+        event_data = data[..., sl]
+        if event_data.shape == D.shape[1:]:
+            D[ii] = event_data
+        else:
+            print('Event shape mismatch {}, {}'.format(event_data.shape, D.shape))
 
-    if bad_times.any():
+    if bad_times.size:
         good_trials = [ii for ii, time in enumerate(event_times)
                        if not np.any(np.logical_and(bad_times,
                            np.any(utils.is_overlap(align_window + time, bad_times))))]
-        D = D[good_trials]
+        D[good_trials] = np.nan
 
-    if len(bad_electrodes):
-        bad_electrodes = bad_electrodes[bad_electrodes < D.shape[2]]
-        D[:, :, bad_electrodes] = np.nan
+    if bad_electrodes.size:
+        bad_electrodes = bad_electrodes[bad_electrodes < D.shape[-1]]
+        D[..., bad_electrodes, :] = np.nan
 
     return D
 
@@ -234,7 +272,7 @@ def load_AS(blockpath, part='R', fband=18):
     -------
     hg : ndarray (n_channels, n_time)
         High gamma data.
-    fs_hg : float
+    fs : float
         Sampling frequency of data.
     """
 
@@ -249,9 +287,9 @@ def load_AS(blockpath, part='R', fband=18):
         htk_path[i] = '%s_%i.h5'%(htk_path[i],fband)
 
     if rank==0:
-        print('\nReading data from %s'%htk_path)
-        print('\nFrequency band: %i'%fband)
-        print('\nLoading please wait ...')
+        print('Reading data from %s'%htk_path)
+        print('Frequency band: %i'%fband)
+        print('Loading please wait ...')
 
 #    HTKout = HTK_hilb.readHTKs(htk_path)
 
@@ -259,7 +297,7 @@ def load_AS(blockpath, part='R', fband=18):
         with  h5py.File(htk_path[0],'r') as HTKout:
             s = HTKout['data'].value
             if rank==0:
-                print('\nHTKs read!')
+                print('HTKs read!')
             # Frequency in Hz
             fs = HTKout['sampling_rate'][0]
     elif len(htk_path)==2:
@@ -275,7 +313,7 @@ def load_AS(blockpath, part='R', fband=18):
 
         s = np.abs(real+1j*imag)
 
-    return (s, fs)
+    return s, fs
 
 
 def load_HG(blockpath):
@@ -291,7 +329,7 @@ def load_HG(blockpath):
     -------
     hg : ndarray (n_channels, n_time)
         High gamma data.
-    fs_hg : float
+    fs : float
         Sampling frequency of data.
     """
 
@@ -299,9 +337,34 @@ def load_HG(blockpath):
     HTKout = HTK.readHTKs(htk_path)
     hg = HTKout['data']
     # Frequency in Hz
-    fs_hg = HTKout['sampling_rate']/10000
+    fs = HTKout['sampling_rate']/srf
 
-    return (hg, fs_hg)
+    return hg, fs
+
+def load_neuro(block_path):
+    """
+    Reads in neuro band data from
+    hdf5 file.
+
+    Parameters
+    ----------
+    blockpath : str
+        Path to block.
+
+    Returns
+    -------
+    X : ndarray (n_bands, n_channels, n_time)
+        Neural data
+    fs : float
+        Sampling frequency of data.
+    """
+    subject_path, block = os.path.split(block_path)
+    neuro_path = os.path.join(block_path, bands.neuro['block_path'].format(block))
+    with h5py.File(neuro_path, 'r') as f:
+        X = f['X_real'].value + 1j*f['X_imag'].value
+        fs = f.attrs['sampling_rate']
+
+    return X, fs
 
 def loadForm(blockpath):
     fname = glob.glob(os.path.join(blockpath + 'Analog', '*.ifc_out.txt'))
@@ -368,23 +431,3 @@ def load_bad_times(blockpath):
     bad_times = np.array(bad_times)
 
     return bad_times
-
-def resample_data(X, num=258):
-    """
-    Resample datapoints and channels.
-
-    Parameteres
-    -----------
-    X : ndarray (n_batch, n_time, n_channels)
-        Data array to resamples.
-    ratio : float
-        Ratio for data resampling. Defaults does 516 -> 258.
-
-    Returns
-    -------
-    resampled_X : ndarray
-        Resampled data array.
-    """
-    n_batch, n_time, n_channels = X.shape
-    resampled_X = resample(X, num, axis=1)
-    return resampled_X

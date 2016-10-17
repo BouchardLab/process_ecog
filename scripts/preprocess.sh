@@ -1,8 +1,8 @@
 #!/bin/bash -l
-#SBATCH -p debug
+#SBATCH -p regular
 #SBATCH --qos=premium
 #SBATCH -N 3
-#SBATCH -t 00:30:00
+#SBATCH -t 12:00:00
 #SBATCH -J preprocess_data
 #SBATCH -o preprocess_output.o%j
 
