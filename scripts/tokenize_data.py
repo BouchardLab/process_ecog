@@ -226,7 +226,7 @@ def process_block(args):
 
     if rank == 0:
         toc = time.time() - tic
-        print('Data generated succesfully in {.2f} seconds'.format(toc))
+        print('Data generated succesfully in {} seconds'.format(toc))
 
     return (data, event_labels, bn, fs)
 

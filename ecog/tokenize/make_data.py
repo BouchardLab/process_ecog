@@ -49,11 +49,13 @@ def run_extract_windows(blockpath, event_times, align_window, data_type, zscore_
         final_fs = dict()
         for b, minf, maxf, d in zip(neuro_bands, min_freqs, max_freqs, hg):
             target_fs = HG_freq * (maxf + minf) / (max_freqs[-1] + min_freqs[-1])
+            print(b, minf, maxf, target_fs, fs)
             if np.allclose(target_fs, fs):
                 hg_b = d
             else:
+                assert target_fs < fs
                 hg_b = resample.resample_ecog(d, target_fs, fs)
-            hg_b = zscore(hg_b, sampling_rate=target_fs, bad_times=bad_times,
+            hg_b = zscore(hg_b, sampling_freq=target_fs, bad_times=bad_times,
                           align_window=align_window, mode=zscore_mode,
                           all_event_times=all_event_times)
             D[b] = extract_windows(hg_b, target_fs, event_times, align_window,
@@ -69,7 +71,7 @@ def run_extract_windows(blockpath, event_times, align_window, data_type, zscore_
 
         hg = hg[..., :256, :]
 
-        hg = zscore(hg, sampling_rate=fs, bad_times=bad_times,
+        hg = zscore(hg, sampling_freq=fs, bad_times=bad_times,
                     align_window=align_window, mode=zscore_mode,
                     all_event_times=all_event_times)
 
@@ -104,7 +106,7 @@ def run_extract_windows(blockpath, event_times, align_window, data_type, zscore_
             print('Loading AS done!')
             print('Z-scoring with mode: %s'%zscore_mode)
 
-        s = zscore(data=s,sampling_rate=fs,bad_times=bad_times,\
+        s = zscore(data=s,sampling_freq=fs,bad_times=bad_times,\
                     align_window=align_window,mode=zscore_mode,\
                     all_event_times=all_event_times)
 
@@ -137,17 +139,18 @@ def run_extract_windows(blockpath, event_times, align_window, data_type, zscore_
 
     return options[data_type]()
 
-def zscore(data, axes=-1, mode=None, sampling_rate=None, bad_times=None,
+
+def zscore(data, axis=-1, mode=None, sampling_freq=None, bad_times=None,
            align_window=None, all_event_times=None):
 
     if mode is None:
         mode = 'events'
 
     if mode == 'whole':
-        mean = data.mean(axis=axes, keepdims=True)
-        std = data.std(axis=axes, keepdims=True)
+        means = data.mean(axis=axis, keepdims=True)
+        stds = data.std(axis=axis, keepdims=True)
     elif mode == 'between_data':
-        tt_data = np.arange(data.shape[-1]) / sampling_rate
+        tt_data = np.arange(data.shape[axis]) / sampling_freq
         data_start = all_event_times.min() + align_window[0]
         data_stop = all_event_times.max() + align_window[1]
         data_time = utils.is_in(tt_data, np.array([data_start, data_stop]))
@@ -156,28 +159,28 @@ def zscore(data, axes=-1, mode=None, sampling_rate=None, bad_times=None,
         for et in all_event_times:
             data_time = data_time & ~utils.is_in(tt_data, et + align_window)
         tmp   = data[..., data_time]
-        means = tmp.mean(axis=axes, keepdims=True)
-        stds  = tmp.std(axis=axes, keepdims=True)
+        means = tmp.mean(axis=axis, keepdims=True)
+        stds  = tmp.std(axis=axis, keepdims=True)
     elif mode == 'data':
-        tt_data = np.arange(data.shape[-1]) / sampling_rate
+        tt_data = np.arange(data.shape[-1]) / sampling_freq
         data_start = all_event_times.min() + align_window[0]
         data_stop = all_event_times.max() + align_window[1]
         data_time = utils.is_in(tt_data, np.array([data_start, data_stop]))
         for bt in bad_times:
             data_time = data_time & ~utils.is_in(tt_data, bt)
         tmp   = data[..., data_time]
-        means = tmp.mean(axis=axes, keepdims=True)
-        stds  = tmp.std(axis=axes, keepdims=True)
+        means = tmp.mean(axis=axis, keepdims=True)
+        stds  = tmp.std(axis=axis, keepdims=True)
     elif mode == 'events':
-        tt_data = np.arange(data.shape[-1]) / sampling_rate
+        tt_data = np.arange(data.shape[-1]) / sampling_freq
         data_time = np.zeros_like(tt_data).astype(bool)
         for et in all_event_times:
             data_time = data_time | utils.is_in(tt_data, et + align_window)
         for bt in bad_times:
             data_time = data_time & ~utils.is_in(tt_data, bt)
         tmp   = data[..., data_time]
-        means = tmp.mean(axis=axes, keepdims=True)
-        stds  = tmp.std(axis=axes, keepdims=True)
+        means = tmp.mean(axis=axis, keepdims=True)
+        stds  = tmp.std(axis=axis, keepdims=True)
     elif ((mode is None) or (mode.lower() == 'none')):
         return data
     else:
@@ -187,7 +190,7 @@ def zscore(data, axes=-1, mode=None, sampling_rate=None, bad_times=None,
 
     return data
 
-def extract_windows(data, fs_data, event_times, align_window=None,
+def extract_windows(data, samping_freq, event_times, align_window=None,
                     bad_times=None, bad_electrodes=None):
     """
     Extracts windows of aligned data. Assumes constant sampling frequency.
@@ -197,7 +200,7 @@ def extract_windows(data, fs_data, event_times, align_window=None,
     ----------
     data : ndarray (*n_bands*, n_channels, n_time)
         Timeseries data.
-    fs_data : float
+    samping_freq : float
         Sampling frequency of data.
     event_time : list of floats
         Time (in seconds) of events.
@@ -231,13 +234,13 @@ def extract_windows(data, fs_data, event_times, align_window=None,
     else:
         bad_electrodes = np.array(bad_electrodes)
 
-    window_length = int(np.ceil(np.diff(align_window) * fs_data))
-    window_start = int(np.floor(align_window[0] * fs_data))
+    window_length = int(np.ceil(np.diff(align_window) * samping_freq))
+    window_start = int(np.floor(align_window[0] * samping_freq))
     D = utils.nans((len(event_times),) + data.shape[:-1] + (window_length,), dtype=np.complex)
-    tt_data = np.arange(data.shape[-1]) / fs_data
+    tt_data = np.arange(data.shape[-1]) / samping_freq
 
     def time_idx(time):
-        return int(np.around(time * fs_data))
+        return int(np.around(time * samping_freq))
 
     for ii, time in enumerate(event_times):
         sl = slice(time_idx(time) + window_start, time_idx(time) + window_start + window_length)

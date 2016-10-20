@@ -90,37 +90,30 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
     subj_path, block_name = os.path.split(block_path)
 
     start = time.time()
-    # first, look for downsampled ECoG in block folder
     h5_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.h5')
     h5_ecog_tmp_path = os.path.join(block_path, 'ecog400', 'ecog_tmp.h5')
     mat_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.mat')
-    print('Loading raw data from:{}'.format(block_name))
     try:
-        os.remove(h5_ecog_path)
-    except OSError:
-        pass
-    try:
-        mode = 0
         # HDF5 format
         with h5py.File(h5_ecog_path, 'r') as f:
             X = f['ecogDS']['data'].value
             fs = f['ecogDS']['sampFreq'].value
-        print('Load time for {}: {} seconds'.format(block_name,
-                                                    time.time()-start))
+        print('Load time for h5 {}: {} seconds'.format(block_name,
+                                                       time.time()-start))
+        print('rates {}: {} {}'.format(block_name, rate, fs))
         if not np.allclose(rate, fs):
+            assert rate < fs
             X = resample.resample_ecog(X, rate, fs)
     except IOError:
-        mode = 1
         try:
-            raise IOError
             # HDF5 .mat format
             with h5py.File(mat_ecog_path, 'r') as f:
                 X = f['ecogDS']['data'][:].T
                 fs = f['ecogDS']['sampFreq'][0]
+                print('Load time for h5.mat {}: {} seconds'.format(block_name,
+                                                               time.time()-start))
         except IOError:
-            mode = 2
             try:
-                raise IOError
                 # Old .mat format
                 X = None
                 fs = None
@@ -132,31 +125,35 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
                         fs = data.item()[ii][0]
                 assert X is not None
                 assert fs is not None
+                print('Load time for mat {}: {} seconds'.format(block_name,
+                                                               time.time()-start))
             except IOError:
-                mode = 3
                 # Load raw HTK files
                 rd_path = os.path.join(block_path, 'RawHTK')
                 HTKoutR = HTK.read_HTKs(rd_path)
                 X = HTKoutR['data']
                 fs = HTKoutR['sampling_rate'] / srf
-        print('Load time for {}: {} seconds'.format(block_name,
+                print('Load time for htk {}: {} seconds'.format(block_name,
                                                     time.time()-start))
         try:
             os.mkdir(os.path.join(block_path, 'ecog400'))
         except OSError:
             pass
+        print('rates {}: {} {}'.format(block_name, rate, fs))
         if not np.allclose(rate, fs):
+            assert rate < fs
             X = resample.resample_ecog(X, rate, fs)
-        start = time.time()
-        with h5py.File(h5_ecog_tmp_path, 'w') as f:
-            g = f.create_group('ecogDS')
-            g.create_dataset('data', data=X)
-            g.create_dataset('sampFreq', data=rate)
-        os.rename(h5_ecog_tmp_path, h5_ecog_path)
-        print('Save time for {}: {} seconds'.format(block_name,
-                                                    time.time()-start))
+        if np.allclose(rate, 400.):
+            start = time.time()
+            with h5py.File(h5_ecog_tmp_path, 'w') as f:
+                g = f.create_group('ecogDS')
+                g.create_dataset('data', data=X)
+                g.create_dataset('sampFreq', data=rate)
+            os.rename(h5_ecog_tmp_path, h5_ecog_path)
+            print('Save time for {}: {} seconds'.format(block_name,
+                                                        time.time()-start))
 
-    assert X.shape[0] == total_channels, (block_name, X.shape, mode)
+    assert X.shape[0] == total_channels, (block_name, X.shape)
 
     bad_elects = load_bad_electrodes(block_path)
     if len(bad_elects) > 0:
@@ -191,7 +188,7 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
         hilb_path = os.path.join(block_path,
                                  '{}_Hilb{}.h5'.format(block_name,
                                                        suffix_str))
-    tmp_path = os.path.join(block_path, block_name + '_tmp' + suffix + '.h5')
+    tmp_path = os.path.join(block_path, '{}_tmp.h5'.format(block_name))
 
     with h5py.File(tmp_path, 'w') as f:
         note = 'applying Hilbert transform'
