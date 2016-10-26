@@ -1,3 +1,5 @@
+from __future__ import division
+
 __author__ = 'David Conant, Jesse Livezey'
 
 import re, os

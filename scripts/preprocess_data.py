@@ -139,7 +139,6 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
             os.mkdir(os.path.join(block_path, 'ecog400'))
         except OSError:
             pass
-        print('rates {}: {} {}'.format(block_name, rate, fs))
         if not np.allclose(rate, fs):
             assert rate < fs
             X = resample.resample_ecog(X, rate, fs)
@@ -180,10 +179,6 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
         hilb_path = os.path.join(block_path,
                                  '{}_neuro_Hilb{}.h5'.format(block_name,
                                                              suffix_str))
-        try:
-            os.remove(hilb_path)
-        except OSError:
-            pass
     else:
         hilb_path = os.path.join(block_path,
                                  '{}_Hilb{}.h5'.format(block_name,
@@ -193,56 +188,44 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
     with h5py.File(tmp_path, 'w') as f:
         note = 'applying Hilbert transform'
         if neuro:
-            dset_real = f.create_dataset('X_real', (len(band_names),
-                                         X.shape[0], X.shape[1]),
-                                         'float32', compression="gzip")
-            dset_imag = f.create_dataset('X_imag', (len(band_names),
-                                         X.shape[0], X.shape[1]),
-                                         'float32', compression="gzip")
+            dset = f.create_dataset('X', (len(band_names),
+                                    X.shape[0], X.shape[1]),
+                                    np.complex, compression="gzip")
             for ii, (min_f, max_f) in enumerate(tqdm(zip(min_freqs, max_freqs),
                                                      note,
                                                      total=len(min_freqs))):
                 kernel = hamming(X, rate, min_f, max_f)
-                dat = aht.apply_hilbert_transform(X, rate, kernel)
-                dset_real[ii] = dat.real.astype('float32')
-                dset_imag[ii] = dat.imag.astype('float32')
+                dset[ii] = aht.apply_hilbert_transform(X, rate, kernel)
 
-            for dset in [dset_real, dset_imag]:
-                dset.dims[0].label = 'band'
-                dset.dims[1].label = 'channel'
-                dset.dims[2].label = 'time'
-                for val, name in ((min_freqs, 'min frequency'),
-                                  (max_freqs, 'max frequency')):
-                    if name not in f.keys():
-                        f[name] = val
-                    dset.dims.create_scale(f[name], name)
-                    dset.dims[0].attach_scale(f[name])
+            dset.dims[0].label = 'band'
+            dset.dims[1].label = 'channel'
+            dset.dims[2].label = 'time'
+            for val, name in ((min_freqs, 'min frequency'),
+                              (max_freqs, 'max frequency')):
+                if name not in f.keys():
+                    f[name] = val
+                dset.dims.create_scale(f[name], name)
+                dset.dims[0].attach_scale(f[name])
 
         else:
-            dset_real = f.create_dataset('X_real', (len(cfs),
-                                         X.shape[0], X.shape[1]),
-                                         'float32', compression="gzip")
-            dset_imag = f.create_dataset('X_imag', (len(cfs),
-                                         X.shape[0], X.shape[1]),
-                                         'float32', compression="gzip")
+            dset = f.create_dataset('X', (len(cfs),
+                                    X.shape[0], X.shape[1]),
+                                    np.complex, compression="gzip")
             for ii, (cf, sd) in enumerate(tqdm(zip(cfs, sds),
                                                note,
                                                total=len(cfs))):
                 kernel = gaussian(X, rate, min_f, max_f)
-                dat = aht.apply_hilbert_transform(X, rate, kernel)
-                dset_real[ii] = dat.real.astype('float32')
-                dset_imag[ii] = dat.imag.astype('float32')
+                dset[ii] = aht.apply_hilbert_transform(X, rate, kernel)
 
-            for dset in [dset_real, dset_imag]:
-                dset.dims[0].label = 'filter'
-                dset.dims[1].label = 'channel'
-                dset.dims[2].label = 'time'
-                for val, name in ((cfs, 'filter_center'),
-                                  (sds, 'filter_sigma')):
-                    if name not in f.keys():
-                        f[name] = val
-                    dset.dims.create_scale(f[name], name)
-                    dset.dims[0].attach_scale(f[name])
+            dset.dims[0].label = 'filter'
+            dset.dims[1].label = 'channel'
+            dset.dims[2].label = 'time'
+            for val, name in ((cfs, 'filter_center'),
+                              (sds, 'filter_sigma')):
+                if name not in f.keys():
+                    f[name] = val
+                dset.dims.create_scale(f[name], name)
+                dset.dims[0].attach_scale(f[name])
 
         f.attrs['sampling_rate'] = rate
     os.rename(tmp_path, hilb_path)

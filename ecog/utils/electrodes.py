@@ -81,21 +81,16 @@ def load_bad_electrodes(blockpath):
     Returns
     -------
     bad_electrodes : ndarray
-        Indices of bad electrodes.
+        Python (0-based) indices of bad electrodes.
     """
 
     bad_electrodes = []
     with open(os.path.join(blockpath, 'Artifacts', 'badChannels.txt'),'rt') as f:
         lines = f.readlines()
-        for bes in lines:
-            for be in bes:
-                if be != '':
-                    try:
-                        be = int(be)
-                        bad_electrodes.append(be)
-                    except ValueError:
-                        pass
+        lines = ' '.join(lines)
+        els = lines.split(' ')
+        els = [int(el) for el in els if el != '']
 
-    bad_electrodes = np.array([be-1 for be in bad_electrodes])
+    bad_electrodes = np.array([el-1 for el in els], dtype=int)
 
     return bad_electrodes

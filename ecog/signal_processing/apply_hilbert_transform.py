@@ -43,10 +43,10 @@ def transform(args):
     X, h, kernel = args
     # Compute analytical signal
     if kernel is None:
-        Xc = ifft(fft(X)*h)
+        Xh = ifft(fft(X)*h)
     else:
-        Xc = ifft(fft(X)*h*kernel)
-    return Xc
+        Xh = ifft(fft(X)*h*kernel)
+    return Xh
 
 def apply_hilbert_transform(X, rate, kernel=None, parallel=True):
     """
@@ -68,6 +68,7 @@ def apply_hilbert_transform(X, rate, kernel=None, parallel=True):
     -------
     Xc : array
         Bandpassed analytical signal (dtype: complex)
+    Xk : arranalytical signal (dtype: complex)
     """
 
     n_channels, time = X.shape
