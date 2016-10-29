@@ -76,7 +76,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     else:
         raise ValueError('Task must of one of {}: {}'.format(tasks, task))
 
-    data_types = ['HG', 'AS_I', 'AS_R', 'AS_AA', 'neuro']
+    data_types = ['HG', 'AS', 'neuro', 'narrow_neuro']
     if data_type not in data_types:
         raise ValueError('Data_type must be one of {}: {}'.format(data_types,
                                                                   data_type))
