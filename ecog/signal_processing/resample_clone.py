@@ -1,3 +1,4 @@
+# Clone of scipy resample w/ various fft bindings
 """
 Copyright (c) 2001, 2002 Enthought, Inc.
 All rights reserved.

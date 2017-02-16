@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function, division
-import argparse, h5py, multiprocessing, os, time
+import argparse, h5py, multiprocessing, os
 import numpy as np
-import pandas as pd
 
 from ecog.tokenize import transcripts, make_data
 from ecog.utils import bands
@@ -22,7 +21,7 @@ def main():
     parser.add_argument('-d', '--data_type', default='HG')
     parser.add_argument('-b', '--zscore', default='between_data')
     parser.add_argument('-m', '--mp', action='store_true', default=False)
-    parser.add_argument('-f', '--fband', type=int, default=18)
+    parser.add_argument('-f', '--fband', type=int, default=None)
     args = parser.parse_args()
     htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
                 args.align_window, args.align_pos, args.data_type, args.zscore,
@@ -76,14 +75,10 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     else:
         raise ValueError('Task must of one of {}: {}'.format(tasks, task))
 
-    data_types = ['HG', 'AS', 'neuro', 'narrow_neuro']
+    data_types = ['HG', 'AA', 'AA_avg', 'neuro', 'narrow_neuro']
     if data_type not in data_types:
         raise ValueError('Data_type must be one of {}: {}'.format(data_types,
                                                                   data_type))
-
-    if fband is None and 'AS' in data_type:
-        raise ValueError('Specify the frequency band with ' +
-                         'data_type AS_I or AS_R')
 
     if align_window is None:
         align_window = np.array([-1., 1.])
@@ -137,7 +132,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
 
     band_ids = results[0][0]
     block_fs = results[0][4]
-    for r in results:
+    for r in results[1:]:
         b_ids = r[0]
         assert len(band_ids) == len(b_ids)
         assert set(band_ids) == set(b_ids)
@@ -191,25 +186,14 @@ def process_block(args):
     (subject, block, path, tokens, align_pos, align_window,
      data_type, zscore, fband) = args
 
-    try:
-        process = multiprocessing.current_process()
-        rank = int(process.name.split('-')[-1])-1
-    except:
-        rank = 0
-
     blockname = '{}_B{}'.format(subject, block)
-    if rank == 0:
-        print('Processing subject {}'.format(subject))
-        print('-----------------------')
+    print('Processing subject {}'.format(subject))
+    print('-----------------------')
     blockpath = os.path.join(path, blockname)
 
-    if rank == 0:
-        print('Convert parseout to dataframe ...')
     # Convert parseout to dataframe
     parseout = transcripts.parse(blockpath, blockname)
     df = transcripts.make_df(parseout, block, subject, align_pos)
-    if rank == 0:
-        print('Dataframe generated succesfully!')
 
     all_event_times = None
     for token in tokens:
@@ -221,10 +205,6 @@ def process_block(args):
             all_event_times = np.hstack((all_event_times,
                                          temp_event_times))
 
-    if rank == 0:
-        print('Generating data matrices ...')
-        tic = time.time()
-
     event_times = None
     event_labels = None
     for ii, token in enumerate(sorted(tokens)):
@@ -234,7 +214,7 @@ def process_block(args):
         if event_times is None:
             event_times = temp_times
         else:
-            event_times = pd.concat([event_times, temp_times])
+            event_times = np.hstack([event_times, temp_times])
 
         temp_labels = np.full(temp_times.shape[0], ii, dtype=int)
         if event_labels is None:
@@ -242,16 +222,16 @@ def process_block(args):
         else:
             event_labels = np.concatenate((event_labels, temp_labels))
 
+    idx = np.argsort(event_times)
+    event_times = event_times[idx]
+    event_labels = event_labels[idx]
+
     band_ids, data, fs = make_data.run_extract_windows(blockpath, event_times,
                                                        align_window, data_type,
                                                        zscore, all_event_times, fband)
     for k, v in data.iteritems():
         assert v.shape[0] == event_labels.shape[0], ('shapes', k, v.shape, event_labels.shape)
     bn = np.full(data.values()[0].shape[0], block, dtype=int)
-
-    if rank == 0:
-        toc = time.time() - tic
-        print('Data generated succesfully in {} seconds'.format(toc))
 
     return band_ids, data, event_labels, bn, fs
 
@@ -277,7 +257,7 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs, anat, data_t
     except OSError:
         pass
     fname_tmp = fname + '.tmp'
-    if data_type == 'neuro':
+    if data_type in ['neuro', 'narrow_neuro', 'AA_avg']:
         neuro_bands = bands.neuro['bands']
         block_fs = np.array([block_fs[b] for b in neuro_bands], dtype=float)
         min_freqs = bands.neuro['min_freqs']
@@ -298,15 +278,33 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs, anat, data_t
             grp = f.create_group('anatomy')
             for key, value in anat.iteritems():
                 grp.create_dataset(key, data=value)
-    else:
+    elif data_type == 'AA':
+        neuro_bands = bands.neuro['bands']
+        band_ids = sorted(data.keys())
+        block_fs = np.array([block_fs[b] for b in band_ids], dtype=float)
+        min_freqs = bands.neuro['min_freqs']
+        max_freqs = bands.neuro['max_freqs']
+        print(band_ids)
+        print(neuro_bands)
         with h5py.File(fname_tmp, 'w') as f:
-            f.create_dataset('X', data=X.astype('float32'))
-            f.create_dataset('y', data=y)
-            f.create_dataset('block', data=bn)
+            for ii, d in data.iteritems():
+                b = neuro_bands[ii]
+                dset = f.create_dataset('X{}'.format(b), data=d)
+                dset.dims[0].label = 'batch'
+                dset.dims[1].label = 'electrode'
+                dset.dims[2].label = 'time'
+            f.create_dataset('y', data=labels)
+            f.create_dataset('block', data=block_numbers)
             f.create_dataset('tokens', data=tokens)
+            f.create_dataset('min_freqs', data=np.array(min_freqs))
+            f.create_dataset('max_freqs', data=np.array(max_freqs))
+            f.create_dataset('bands', data=np.array(neuro_bands))
+            f.create_dataset('sampling_freqs', data=np.array(block_fs))
             grp = f.create_group('anatomy')
-            for key in sorted(anat.keys()):
-                grp.create_dataset(key, data=anat[key])
+            for key, value in anat.iteritems():
+                grp.create_dataset(key, data=value)
+    else:
+        raise ValueError
     os.rename(fname_tmp, fname)
 
 

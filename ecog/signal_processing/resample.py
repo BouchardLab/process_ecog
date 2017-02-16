@@ -1,6 +1,6 @@
 from __future__ import division
 import numpy as np
-from scipy.signal import resample
+from resample_clone import resample
 
 __authors__ = "Alex Bujan"
 

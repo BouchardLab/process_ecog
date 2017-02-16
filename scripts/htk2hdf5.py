@@ -1,6 +1,6 @@
 import numpy as np
 import h5py
-import .HTK
+from ecog.utils import HTK
 import argparse
 
 def htk_to_hdf5(block, subject, path):
@@ -10,9 +10,9 @@ def htk_to_hdf5(block, subject, path):
     print('\nConverting HTK to HDF5 -- subject: {}'.format(subject))
 
     for part in parts:
-        htk = HTK_hilb.readHTKs(os.path.join(path, subject,
-                                             '{}_B{}'.format(subject, block),
-                                             part))
+        htk = HTK.readHTKs(os.path.join(path, subject,
+                                        '{}_B{}'.format(subject, block),
+                                        part))
         for i in xrange(htk['data'].shape[0]):
             print('\n\tBlock: B_{}; Part: {}; Freq_band: {}'.format(block, part, i))
             fname = os.path.join(path, subject,
