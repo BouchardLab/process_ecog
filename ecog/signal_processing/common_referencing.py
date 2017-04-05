@@ -20,3 +20,24 @@ def subtract_CAR(X, b_size=16):
         X = np.vstack([X_1.reshape((s*b_size, time_points)), X_2])
     else:
         return X_1.reshape((s*b_size, time_points))
+
+def subtract_common_median_reference(X, channel_axis=-2):
+    """
+    Compute and subtract common median reference 
+    for the entire grid.
+
+    Parameters
+    ----------
+    X : ndarray (..., n_channels, n_time)
+        Data to common median reference.
+
+    Returns
+    -------
+    Xp : ndarray (..., n_channels, n_time)
+        Common median referenced data.
+    """
+
+    median = np.nanmedian(X, axis=channel_axis, keepdims=True)
+    Xp = X - median
+
+    return Xp

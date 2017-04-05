@@ -13,16 +13,18 @@ def resample_ecog(X, new_freq, old_freq, axis=-1):
     Parameters
     ----------
     X : array
-        Input data, dimensions (n_channels, n_timePoints)
+        Input data, dimensions (n_channels, ..., n_timePoints)
     new_freq : float
         New sampling frequency
     old_freq : float
         Original sampling frequency
+    axis : int (optional)
+        Axis along which to resample the data
 
     Returns
     -------
     Xds : array
-        Downsampled data, dimensions (n_channels, n_timePoints_new)
+        Downsampled data, dimensions (n_channels, ..., n_timePoints_new)
     """
     time = X.shape[axis]
     new_time = int(np.ceil(time * new_freq / old_freq))
