@@ -1,6 +1,5 @@
 import numpy as np
 
-from scipy.signal import resample as sp_resample
 from ecog.signal_processing import (hilbert_transform,
         gaussian, hamming)
 
