@@ -11,17 +11,14 @@ except ImportError:
     except ImportError:
         from numpy.fft import rfft, irfft
 
-try:
-    from tqdm import tqdm
-except ImportError:
-    def tqdm(x, *args, **kwargs):
-        return x
+
+__all__ = ['linenoise_notch']
+
 
 __authors__ = "Alex Bujan"
 
 
-def apply_notches(args, fft=True):
-    X, notches, rate = args
+def apply_notches(X, notches, rate, fft=True):
     if fft:
         fs = rfftfreq(X.shape[-1], 1./rate)
         delta = 1.
@@ -30,7 +27,7 @@ def apply_notches(args, fft=True):
         nyquist = rate/2.
         n_taps = 1001
         gain = [1, 1, 0, 0, 1, 1]
-    for notch in tqdm(notches, 'applying notch filters'):
+    for notch in notches:
         if fft:
             window_mask = np.logical_and(fs > notch-delta, fs < notch+delta)
             window_size = window_mask.sum()
@@ -45,7 +42,8 @@ def apply_notches(args, fft=True):
         X = irfft(fd)
     return X
 
-def apply_linenoise_notch(X, rate):
+
+def linenoise_notch(X, rate):
     """
     Apply Notch filter at 60 Hz and its harmonics
     
@@ -65,6 +63,5 @@ def apply_linenoise_notch(X, rate):
     nyquist = rate / 2
     noise_hz   = 60.
     notches = np.arange(noise_hz, nyquist, noise_hz)
-    n_channels, time = X.shape
 
-    return apply_notches((X, notches, rate))
+    return apply_notches(X, notches, rate)
