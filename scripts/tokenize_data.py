@@ -303,6 +303,24 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs, anat, data_t
             grp = f.create_group('anatomy')
             for key, value in anat.iteritems():
                 grp.create_dataset(key, data=value)
+    elif data_type == 'HG':
+        band_ids = sorted(data.keys())
+        block_fs = np.array([block_fs[b] for b in band_ids], dtype=float)
+        with h5py.File(fname_tmp, 'w') as f:
+            b = 'high gamma'
+            d = data[b]
+            dset = f.create_dataset('X{}'.format(b), data=d)
+            dset.dims[0].label = 'batch'
+            dset.dims[1].label = 'electrode'
+            dset.dims[2].label = 'time'
+            f.create_dataset('y', data=labels)
+            f.create_dataset('block', data=block_numbers)
+            f.create_dataset('tokens', data=tokens)
+            f.create_dataset('bands', data=np.array([b]))
+            f.create_dataset('sampling_freqs', data=np.array(block_fs))
+            grp = f.create_group('anatomy')
+            for key, value in anat.iteritems():
+                grp.create_dataset(key, data=value)
     else:
         raise ValueError
     os.rename(fname_tmp, fname)

@@ -55,7 +55,7 @@ def run_extract_windows(block_path, event_times, align_window,
             else:
                 assert target_fs < fs
                 X = resample.resample_ecog(d, target_fs, fs)
-            X = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
+            X, m, s = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
                        align_window=align_window, mode=zscore_mode,
                        all_event_times=all_event_times, block_path=block_path)
             D[b] = extract_windows(X, target_fs, event_times, align_window,
@@ -69,20 +69,35 @@ def run_extract_windows(block_path, event_times, align_window,
         hg_bands = ['high gamma']
         bad_electrodes = load_bad_electrodes(block_path)
         bad_times = load_bad_times(block_path)
-        hg, fs = load_HG(block_path)
 
-        hg = hg[..., :256, :]
+        target_fs = bands.neuro['HG_freq']
+        b = 'high gamma'
 
-        hg = zscore(hg, sampling_freq=fs, bad_times=bad_times,
+        X, fs = load_HG(block_path)
+        X = X[..., :256, :]
+        X = X.mean(axis=0)
+
+        if not np.allclose(target_fs, fs):
+            assert target_fs < fs
+            start = time.time()
+            X = resample.resample_ecog(X, target_fs, fs)
+            print('downsample', time.time()-start)
+        fs = target_fs
+
+        D = dict()
+        final_fs = dict()
+
+        X, m, s = zscore(X, sampling_freq=fs, bad_times=bad_times,
                     align_window=align_window, mode=zscore_mode,
                     all_event_times=all_event_times,
                     block_path=block_path)
 
-        D = extract_windows(hg, fs, event_times, align_window,
-                            bad_times=bad_times,
-                            bad_electrodes=bad_electrodes)
+        D[b] = extract_windows(X, target_fs, event_times, align_window,
+                               bad_times=bad_times,
+                               bad_electrodes=bad_electrodes)
+        final_fs[b] = target_fs
 
-        return hg_bands, {hg_bands[0]: D}, {hg_bands[0]: fs}
+        return ['high gamma'], D, final_fs
 
     def AA_avg():
         bad_electrodes = load_bad_electrodes(block_path)
@@ -121,7 +136,7 @@ def run_extract_windows(block_path, event_times, align_window,
 
             print('load', block_path, b, target_fs, time.time()-start)
             start = time.time()
-            X = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
+            X, m, s = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
                        align_window=align_window, mode=zscore_mode,
                        all_event_times=all_event_times,
                        block_path=block_path)
@@ -151,7 +166,7 @@ def run_extract_windows(block_path, event_times, align_window,
         X, fs = load_AA(block_path, fband, target_fs)
         print('load', block_path, fband, target_fs, time.time()-start)
         start = time.time()
-        X = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
+        X, m, s = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
                    align_window=align_window, mode=zscore_mode,
                    all_event_times=all_event_times,
                    block_path=block_path)
@@ -184,7 +199,7 @@ def run_extract_windows(block_path, event_times, align_window,
             # target_fs = 200.
             print(block_path, b, target_fs)
             X, fs = load_AA(block_path, close_idx, target_fs)
-            X = zscore(X, sampling_freq=fs, bad_times=bad_times,
+            X, m, s = zscore(X, sampling_freq=fs, bad_times=bad_times,
                        align_window=align_window, mode=zscore_mode,
                        all_event_times=all_event_times,
                        block_path=block_path)
@@ -247,6 +262,7 @@ def zscore(data, axis=-1, mode=None, sampling_freq=None, bad_times=None,
             data_time = data_time & ~utils.is_in(tt_data, bt)
         baseline = data[..., data_time]
     elif mode == 'file':
+        tt_data = np.arange(data.shape[axis]) / sampling_freq
         baseline = load_baseline(kwargs['block_path'], data, tt_data)
     else:
         raise ValueError('zscore_mode type {} not recognized.'.format(mode))
@@ -409,7 +425,7 @@ def load_HG(block_path):
     """
 
     htk_path = os.path.join(block_path, 'HilbAA_70to150_8band')
-    HTKout = HTK.readHTKs(htk_path)
+    HTKout = HTK.read_HTKs(htk_path)
     hg = HTKout['data']
     # Frequency in Hz
     fs = HTKout['sampling_rate']/srf
@@ -459,19 +475,19 @@ def loadForm(block_path):
 def load_anatomy(subj_dir):
 
     anatomy_filename = glob.glob(os.path.join(subj_dir, 'anatomy',
-                                              '*_anatomy.mat'))[0]
+                                              '*_anatomy.mat'))
     elect_labels_filename = glob.glob(os.path.join(subj_dir,
                                                    'elec_labels.mat'))
 
     electrode_labels = dict()
-    if anatomy_filename:
+    if len(anatomy_filename) > 0:
         try:
-            anatomy = sp.io.loadmat(anatomy_filename)['anatomy']
+            anatomy = sp.io.loadmat(anatomy_filename[0])['anatomy']
             names = anatomy.dtype.names
             for n, labels in zip(names, anatomy[0][0]):
                 electrode_labels[n] = np.array(labels).ravel()
         except ValueError:
-            with h5py.File(anatomy_filename) as f:
+            with h5py.File(anatomy_filename[0]) as f:
                 for n in f['anatomy'].keys():
                     electrode_labels[n] = f['anatomy'][n].value
     elif elect_labels_filename:
@@ -479,7 +495,7 @@ def load_anatomy(subj_dir):
         a = sp.io.loadmat(os.path.join(subj_dir, 'elec_labels.mat'))
         electrode_labels = np.array([elem[0] for elem in a['labels'][0]])
     else:
-        raise ValueError('Could not find anatomy file.')
+        raise ValueError('Could not find anatomy file in {}.'.format(subj_dir))
 
     return electrode_labels
 
