@@ -1,6 +1,10 @@
 from __future__ import division
 import numpy as np
 
+
+__all__ = ['subtract_CAR',
+           'subtract_common_median_reference']
+
 def subtract_CAR(X, b_size=16):
     """
     Compute and subtract common average reference in 16 channel blocks.
@@ -12,7 +16,7 @@ def subtract_CAR(X, b_size=16):
 
     X_1 = X[:channels-r]
 
-    X_1  = X_1.reshape((s, b_size, time_points))
+    X_1 = X_1.reshape((s, b_size, time_points))
     X_1 -= np.nanmean(X_1, axis=1, keepdims=True)
     if r > 0:
         X_2 = X[channels-r:]
@@ -21,9 +25,10 @@ def subtract_CAR(X, b_size=16):
     else:
         return X_1.reshape((s*b_size, time_points))
 
+
 def subtract_common_median_reference(X, channel_axis=-2):
     """
-    Compute and subtract common median reference 
+    Compute and subtract common median reference
     for the entire grid.
 
     Parameters

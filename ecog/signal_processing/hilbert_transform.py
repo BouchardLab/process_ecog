@@ -21,9 +21,10 @@ def gaussian(X, rate, center, sd):
     n_channels, time = X.shape
     freq = fftfreq(time, 1./rate)
 
-    k  = np.exp((-(np.abs(freq)-center)**2)/(2*(sd**2)))
+    k = np.exp((-(np.abs(freq) - center)**2)/(2 * (sd**2)))
 
     return k
+
 
 def hamming(X, rate, min_freq, max_freq):
     n_channels, time = X.shape
@@ -47,11 +48,11 @@ def hilbert_transform(X, rate, filters=None):
     """
     Apply bandpass filtering with Hilbert transform using
     a prespecified set of filters.
-    
+
     Parameters
     ----------
     X : ndarray (n_channels, n_time)
-        Input data, dimensions 
+        Input data, dimensions
     rate : float
         Number of samples per second.
     filters : filter or list of filters (optional)
@@ -65,12 +66,12 @@ def hilbert_transform(X, rate, filters=None):
     if not isinstance(filters, list):
         filters = [filters]
     n_channels, time = X.shape
-    freq = fftfreq(time, 1./rate)
+    freq = fftfreq(time, 1. / rate)
 
     # Heavyside filter
     h = np.zeros(len(freq))
-    h[freq > 0]=2.
-    h[0]=1.
+    h[freq > 0] = 2.
+    h[0] = 1.
     h = h[np.newaxis, :]
 
     Xh = np.zeros((len(filters),) + X.shape, dtype=np.complex)

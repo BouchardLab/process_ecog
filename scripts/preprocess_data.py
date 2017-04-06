@@ -10,13 +10,12 @@ except:
     def tqdm(x, *args, **kwargs):
         return x
 
-from ecog.utils import HTK
 from ecog.signal_processing import resample
-import ecog.signal_processing.subtract_CAR as scar
+from ecog.signal_processing import subtract_CAR
 from ecog.signal_processing import linenoise_notch
 from ecog.signal_processing import hilbert_transform
-from ecog.signal_processing.apply_hilbert_transform import gaussian, hamming
-from ecog.utils import load_bad_electrodes, bands
+from ecog.signal_processing import gaussian, hamming
+from ecog.utils import HTK, load_bad_electrodes, bands
 
 
 __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
@@ -99,7 +98,7 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
             X = f['ecogDS']['data'].value
             fs = f['ecogDS']['sampFreq'].value
         print('Load time for h5 {}: {} seconds'.format(block_name,
-                                                       time.time()-start))
+                                                       time.time() - start))
         print('rates {}: {} {}'.format(block_name, rate, fs))
         if not np.allclose(rate, fs):
             assert rate < fs
@@ -110,8 +109,8 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
             with h5py.File(mat_ecog_path, 'r') as f:
                 X = f['ecogDS']['data'][:].T
                 fs = f['ecogDS']['sampFreq'][0]
-                print('Load time for h5.mat {}: {} seconds'.format(block_name,
-                                                               time.time()-start))
+                print('Load time for h5.mat {}:' +
+                      ' {} seconds'.format(block_name, time.time() - start))
         except IOError:
             try:
                 # Old .mat format
@@ -125,23 +124,23 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
                         fs = data.item()[ii][0]
                 assert X is not None
                 assert fs is not None
-                print('Load time for mat {}: {} seconds'.format(block_name,
-                                                               time.time()-start))
+                print('Load time for mat {}:' +
+                      ' {} seconds'.format(block_name, time.time() - start))
             except IOError:
                 # Load raw HTK files
                 rd_path = os.path.join(block_path, 'RawHTK')
                 HTKoutR = HTK.read_HTKs(rd_path)
                 X = HTKoutR['data']
                 fs = HTKoutR['sampling_rate'] / srf
-                print('Load time for htk {}: {} seconds'.format(block_name,
-                                                    time.time()-start))
+                print('Load time for htk {}:' +
+                      ' {} seconds'.format(block_name, time.time() - start))
         try:
             os.mkdir(os.path.join(block_path, 'ecog400'))
         except OSError:
             pass
         if not np.allclose(rate, fs):
             assert rate < fs
-            X = resample.resample_ecog(X, rate, fs)
+            X = resample(X, rate, fs)
         if np.allclose(rate, 400.):
             start = time.time()
             with h5py.File(h5_ecog_tmp_path, 'w') as f:
@@ -160,13 +159,13 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
 
     # Subtract CAR
     start = time.time()
-    X = scar.subtract_CAR(X)
+    X = subtract_CAR(X)
     print('CAR subtract time for {}: {} seconds'.format(block_name,
                                                         time.time()-start))
 
     # Apply Notch filters
     start = time.time()
-    X = linenoise_notch.apply_linenoise_notch(X, rate)
+    X = linenoise_notch(X, rate)
     print('Notch filter time for {}: {} seconds'.format(block_name,
                                                         time.time()-start))
 
@@ -191,11 +190,12 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
             dset = f.create_dataset('X', (len(band_names),
                                     X.shape[0], X.shape[1]),
                                     np.complex, compression="gzip")
+            kernels = []
             for ii, (min_f, max_f) in enumerate(tqdm(zip(min_freqs, max_freqs),
                                                      note,
                                                      total=len(min_freqs))):
-                kernel = hamming(X, rate, min_f, max_f)
-                dset[ii] = hilbert_transform(X, rate, kernel)
+                kernels.append(hamming(X, rate, min_f, max_f))
+            dset[ii] = hilbert_transform(X, rate, kernels)
 
             dset.dims[0].label = 'band'
             dset.dims[1].label = 'channel'
@@ -211,11 +211,12 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
             dset = f.create_dataset('X', (len(cfs),
                                     X.shape[0], X.shape[1]),
                                     np.complex, compression="gzip")
+            kernels = []
             for ii, (cf, sd) in enumerate(tqdm(zip(cfs, sds),
                                                note,
                                                total=len(cfs))):
-                kernel = gaussian(X, rate, min_f, max_f)
-                dset[ii] = hilbert_transform(X, rate, kernel)
+                kernels.append(gaussian(X, rate, cf, sd))
+            dset[ii] = hilbert_transform(X, rate, kernels)
 
             dset.dims[0].label = 'filter'
             dset.dims[1].label = 'channel'

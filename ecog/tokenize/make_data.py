@@ -2,13 +2,12 @@ from __future__ import print_function, division
 import csv, glob, h5py, os, time
 
 import numpy as np
-import scipy as sp
 from scipy.io import loadmat
 
-import ecog.utils
+from ecog import utils
 from ..signal_processing import resample, zscore
-from ..utils import (bands, HTK
-        load_bad_electrodes, load_bad_times, zscore)
+from ..utils import (bands, HTK,
+                     load_bad_electrodes, load_bad_times)
 
 __author__ = 'David Conant, Jesse Livezey'
 
@@ -56,8 +55,9 @@ def run_extract_windows(block_path, event_times, align_window,
                 assert target_fs < fs
                 X = resample.resample_ecog(d, target_fs, fs)
             X, m, s = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
-                       align_window=align_window, mode=zscore_mode,
-                       all_event_times=all_event_times, block_path=block_path)
+                             align_window=align_window, mode=zscore_mode,
+                             all_event_times=all_event_times,
+                             block_path=block_path)
             D[b] = extract_windows(X, target_fs, event_times, align_window,
                                    bad_times=bad_times,
                                    bad_electrodes=bad_electrodes)
@@ -66,7 +66,6 @@ def run_extract_windows(block_path, event_times, align_window,
         return neuro_bands, D, final_fs
 
     def HG():
-        hg_bands = ['high gamma']
         bad_electrodes = load_bad_electrodes(block_path)
         bad_times = load_bad_times(block_path)
 
@@ -88,9 +87,9 @@ def run_extract_windows(block_path, event_times, align_window,
         final_fs = dict()
 
         X, m, s = zscore(X, sampling_freq=fs, bad_times=bad_times,
-                    align_window=align_window, mode=zscore_mode,
-                    all_event_times=all_event_times,
-                    block_path=block_path)
+                         align_window=align_window, mode=zscore_mode,
+                         all_event_times=all_event_times,
+                         block_path=block_path)
 
         D[b] = extract_windows(X, target_fs, event_times, align_window,
                                bad_times=bad_times,
@@ -112,39 +111,29 @@ def run_extract_windows(block_path, event_times, align_window,
 
         D = dict()
         final_fs = dict()
+        means = dict()
+        stds = dict()
         for b, minf, maxf in zip(neuro_bands, min_freqs, max_freqs):
             target_fs = (HG_freq * (minf + maxf) /
                          (max_freqs[-1] + min_freqs[-1]))
             start = time.time()
-            X_list = []
-            fs_list = []
-            for ii, cfs in enumerate(chang_lab_cfs):
-                if (cfs > minf) and (cfs < maxf):
-                    X, fs = load_AA(block_path, ii)
-                    X_list.append(X)
-                    assert X.shape == X_list[0].shape
-            for fs in fs_list[1:]:
-                assert fs == fs_list[0]
-            X = np.array(X_list).mean(axis=0)
-
-            if not np.allclose(target_fs, fs):
-                assert target_fs < fs
-                start = time.time()
-                X = resample.resample_ecog(X, target_fs, fs)
-                print('downsample', time.time()-start)
-            fs = target_fs
+            idxs = np.nonzero((chang_lab_cfs > minf) *
+                              (chang_lab_cfs < maxf))[0].tolist()
+            X, fs = load_AA_band_mean(block_path, idxs, target_fs)
 
             print('load', block_path, b, target_fs, time.time()-start)
             start = time.time()
-            X, m, s = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
-                       align_window=align_window, mode=zscore_mode,
-                       all_event_times=all_event_times,
-                       block_path=block_path)
+            X, m, s = zscore(X, sampling_freq=fs, bad_times=bad_times,
+                             align_window=align_window, mode=zscore_mode,
+                             all_event_times=all_event_times,
+                             block_path=block_path)
             print('zscore', block_path, fband, target_fs, time.time()-start)
             D[b] = extract_windows(X, target_fs, event_times, align_window,
                                    bad_times=bad_times,
                                    bad_electrodes=bad_electrodes)
             final_fs[b] = target_fs
+            means[b] = m
+            stds[b] = s
         return neuro_bands, D, final_fs
 
     def AA():
@@ -163,13 +152,13 @@ def run_extract_windows(block_path, event_times, align_window,
         target_fs = (HG_freq * 2. * chang_lab_cfs[fband] /
                      (max_freqs[-1] + min_freqs[-1]))
         start = time.time()
-        X, fs = load_AA(block_path, fband, target_fs)
+        X, fs = load_AA_band_mean(block_path, fband, target_fs)
         print('load', block_path, fband, target_fs, time.time()-start)
         start = time.time()
         X, m, s = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
-                   align_window=align_window, mode=zscore_mode,
-                   all_event_times=all_event_times,
-                   block_path=block_path)
+                         align_window=align_window, mode=zscore_mode,
+                         all_event_times=all_event_times,
+                         block_path=block_path)
         print('zscore', block_path, fband, target_fs, time.time()-start)
         D[fband] = extract_windows(X, target_fs, event_times, align_window,
                                    bad_times=bad_times,
@@ -177,44 +166,10 @@ def run_extract_windows(block_path, event_times, align_window,
         final_fs[fband] = target_fs
         return [fband], D, final_fs
 
-    def narrow_neuro():
-        bad_electrodes = load_bad_electrodes(block_path)
-        bad_times = load_bad_times(block_path)
-
-        neuro_bands = bands.neuro['bands']
-        min_freqs = bands.neuro['min_freqs']
-        max_freqs = bands.neuro['max_freqs']
-        HG_freq = bands.neuro['HG_freq']
-
-        chang_lab_cfs = bands.chang_lab['cfs']
-
-        D = dict()
-        final_fs = dict()
-        for b, minf, maxf in zip(neuro_bands, min_freqs, max_freqs):
-            peakf = (minf + maxf) / 2.
-            close_idx = np.argmin(abs(chang_lab_cfs - peakf))
-            # target_fs = 2. *  chang_lab_cfs[close_idx]
-            target_fs = (HG_freq * 2. * chang_lab_cfs[close_idx] /
-                         (max_freqs[-1] + min_freqs[-1]))
-            # target_fs = 200.
-            print(block_path, b, target_fs)
-            X, fs = load_AA(block_path, close_idx, target_fs)
-            X, m, s = zscore(X, sampling_freq=fs, bad_times=bad_times,
-                       align_window=align_window, mode=zscore_mode,
-                       all_event_times=all_event_times,
-                       block_path=block_path)
-            D[b] = extract_windows(X, fs, event_times, align_window,
-                                   bad_times=bad_times,
-                                   bad_electrodes=bad_electrodes)
-            final_fs[b] = fs
-
-        return neuro_bands, D, final_fs
-
     options = {'HG': HG,
                'AA': AA,
                'AA_avg': AA_avg,
-               'neuro': neuro,
-               'narrow_neuro': narrow_neuro}
+               'neuro': neuro}
 
     return options[data_type]()
 
@@ -300,54 +255,127 @@ def extract_windows(data, sampling_freq, event_times, align_window=None,
     return D
 
 
-def load_AA(block_path, fband, target_fs=None):
+def load_AA_band_mean(block_path, fbands, target_fs=None):
     """
-    Reads in HTK data.
+    Reads in analytic amplitude data.
 
     Parameters
     ----------
     block_path : str
         Path to block.
+    fbands : int or list of ints
+        Indices of Chang lab standard bands (0 through 40).
 
     Returns
     -------
-    hg : ndarray (n_channels, n_time)
-        High gamma data.
+    X : ndarray (n_channels, n_time)
+        ECoG data.
     fs : float
         Sampling frequency of data.
     """
-
-    real_path = os.path.join(block_path,
-                             'HilbReal_4to200_40band_{}.h5'.format(fband))
-    imag_path = os.path.join(block_path,
-                             'HilbImag_4to200_40band_{}.h5'.format(fband))
+    block = os.path.basename(block_path)
+    if not isinstance(fbands, list):
+        fbands = [fbands]
 
     start = time.time()
-    with h5py.File(real_path, 'r') as f:
-        real = f['data'].value
-        rfs = f['sampling_rate'][0]
+    for fband in fbands:
+        if fband < 29 or fband > 36:
+            blank_h5 = 'HilbReal_4to200_40band_{}.h5'
+            h5_path = os.path.join(block_path,
+                                   blank_h5.format(fband))
+            htk_path = os.path.join(block_path, 'HilbReal_4to200_40band')
+        else:
+            blank_h5 = 'HilbAA_70to150_8band_{}.h5'
+            h5_path = os.path.join(block_path,
+                                   blank_h5.format(fband-29))
+            htk_path = os.path.join(block_path, 'HilbAA_70to150_8band')
 
-    with h5py.File(imag_path, 'r') as f:
-        imag = f['data'].value
-        ifs = f['sampling_rate'][0]
+        if not os.path.isfile(h5_path):
+            if not os.path.isfile(htk_path):
+                ecog400_path = os.path.join(block_path,
+                                            '{}_Hilb.h5'.format(block))
+                with h5py.File(ecog400_path) as f:
+                    d = f['X'].value
+                    sampling_rate = f.attrs['sampling_rate']
+            else:
+                d = HTK.read_HTKs(htk_path)
+                data = d['data']
+                sampling_rate = d['sampling_rate']
+
+            for ii in range(data.shape[0]):
+                h5_path = os.path.join(block_path,
+                                       blank_h5.format(ii))
+                tmp_path = h5_path + '_tmp'
+                with h5py.File(tmp_path, 'w') as f:
+                    f.create_dataset('data', data=d[ii])
+                    f.create_dataset('sampling_rate', data=sampling_rate)
+                os.rename(tmp_path, h5_path)
+
+    for fband in fbands:
+        if fband < 29 or fband > 36:
+            blank_h5 = 'HilbImag_4to200_40band_{}.h5'
+            h5_path = os.path.join(block_path,
+                                   blank_h5.format(fband))
+            htk_path = os.path.join(block_path, 'HilbImag_4to200_40band')
+
+            if not os.path.isfile(h5_path):
+                d = HTK.read_HTKs(htk_path)
+                data = d['data']
+                sampling_rate = d['sampling_rate']
+                for ii in range(data.shape[0]):
+                    h5_path = os.path.join(block_path,
+                                           blank_h5.format(ii))
+                    tmp_path = h5_path + '_tmp'
+                    with h5py.File(tmp_path, 'w') as f:
+                        f.create_dataset('data', data=d[ii])
+                        f.create_dataset('sampling_rate', data=sampling_rate)
+                    os.rename(tmp_path, h5_path)
+
+    print('rewrite htk', time.time()-start)
+
+    Xs = []
+    start = time.time()
+    for fband in fbands:
+        if fband < 29 or fband > 36:
+            real_path = os.path.join(block_path,
+                                     'HilbReal_4to200_40band' +
+                                     '_{}.h5'.format(fband))
+            imag_path = os.path.join(block_path,
+                                     'HilbImag_4to200_40band' +
+                                     '_{}.h5'.format(fband))
+
+            with h5py.File(real_path, 'r') as f:
+                real = f['data'].value
+                rfs = f['sampling_rate'][0]
+
+            with h5py.File(imag_path, 'r') as f:
+                imag = f['data'].value
+                ifs = f['sampling_rate'][0]
+
+            assert np.allclose(rfs, ifs)
+            fs = rfs
+            X = real + 1j * imag
+            X = abs(X)
+        else:
+            aa_path = os.path.join(block_path,
+                                   'HilbAA_70to150_8band_{}.h5'.format(fband -
+                                                                       29))
+
+            with h5py.File(aa_path, 'r') as f:
+                X = f['data'].value
+                fs = f['sampling_rate'][0]
+
+        if target_fs is not None:
+            if not np.allclose(target_fs, fs):
+                assert target_fs < fs
+                start = time.time()
+                X = resample(X, target_fs, fs)
+                print('downsample', time.time()-start)
+
+            fs = target_fs
+        Xs.append(X)
     print('load inner', time.time()-start)
-
-    assert np.allclose(rfs, ifs)
-    fs = rfs
-
-    X = real + 1j * imag
-    start = time.time()
-    X = abs(X)
-    print('abs', time.time()-start)
-
-    if target_fs is not None:
-        if not np.allclose(target_fs, fs):
-            assert target_fs < fs
-            start = time.time()
-            X = resample.resample_ecog(X, target_fs, fs)
-            print('downsample', time.time()-start)
-
-        fs = target_fs
+    X = np.stack(Xs).mean(axis=0)
 
     return X, fs
 
@@ -427,7 +455,7 @@ def load_anatomy(subj_dir):
     electrode_labels = dict()
     if len(anatomy_filename) > 0:
         try:
-            anatomy = sp.io.loadmat(anatomy_filename[0])['anatomy']
+            anatomy = loadmat(anatomy_filename[0])['anatomy']
             names = anatomy.dtype.names
             for n, labels in zip(names, anatomy[0][0]):
                 electrode_labels[n] = np.array(labels).ravel()
@@ -437,7 +465,7 @@ def load_anatomy(subj_dir):
                     electrode_labels[n] = f['anatomy'][n].value
     elif elect_labels_filename:
         raise NotImplementedError
-        a = sp.io.loadmat(os.path.join(subj_dir, 'elec_labels.mat'))
+        a = loadmat(os.path.join(subj_dir, 'elec_labels.mat'))
         electrode_labels = np.array([elem[0] for elem in a['labels'][0]])
     else:
         raise ValueError('Could not find anatomy file in {}.'.format(subj_dir))

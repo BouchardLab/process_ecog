@@ -1,8 +1,8 @@
 #!/bin/bash -l
-#SBATCH -p debug
+#SBATCH -p regular
 #SBATCH --qos=premium
-#SBATCH -N 7
-#SBATCH -t 00:30:00
+#SBATCH -N 6
+#SBATCH -t 02:00:00
 #SBATCH -J preprocess_data
 #SBATCH -o preprocess_output.o%j
 
@@ -22,15 +22,15 @@ echo $(which python)
 echo $PATH
 
 # 7 blocks
-for b in 1 8 9 15 76 89 105; do
-  srun -N 1 -n 1 -c "$cores" python -u preprocess_data.py /project/projectdirs/m2043/BRAINdata/Humans EC2 "$b" -n &
-done
+#for b in 1 8 9 15 76 89 105; do
+#  srun -N 1 -n 1 -c "$cores" python -u preprocess_data.py /project/projectdirs/m2043/BRAINdata/Humans EC2 "$b" -n &
+#done
 
 # 7 blocks
 #for b in 15 39 46 49 53 60 63; do
-#for b in 15 46 60 63; do
-#  srun -N 1 -n 1 -c "$cores" python -u preprocess_data.py /project/projectdirs/m2043/BRAINdata/Humans EC9 "$b" -n &
-#done
+for b in 39 46 49 53 60 63; do
+  srun -N 1 -n 1 -c "$cores" python -u preprocess_data.py /project/projectdirs/m2043/jlivezey EC9 "$b" &
+done
 
 # 14 blocks
 #for b in 1 2 4 6 9 21 63 65 67 69 71 78 82 83; do

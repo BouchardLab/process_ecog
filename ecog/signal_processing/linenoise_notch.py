@@ -32,7 +32,8 @@ def apply_notches(X, notches, rate, fft=True):
             window_mask = np.logical_and(fs > notch-delta, fs < notch+delta)
             window_size = window_mask.sum()
             window = np.hamming(window_size)
-            fd[:, window_mask] = fd[:, window_mask] * (1.-window)[np.newaxis, :]
+            fd[:, window_mask] = (fd[:, window_mask] *
+                                  (1.-window)[np.newaxis, :])
         else:
             freq = np.array([0, notch-1, notch-.5,
                              notch+.5, notch+1, nyquist]) / nyquist
@@ -46,7 +47,7 @@ def apply_notches(X, notches, rate, fft=True):
 def linenoise_notch(X, rate):
     """
     Apply Notch filter at 60 Hz and its harmonics
-    
+
     Parameters
     ----------
     X : array
@@ -61,7 +62,7 @@ def linenoise_notch(X, rate):
     """
 
     nyquist = rate / 2
-    noise_hz   = 60.
+    noise_hz = 60.
     notches = np.arange(noise_hz, nyquist, noise_hz)
 
     return apply_notches(X, notches, rate)

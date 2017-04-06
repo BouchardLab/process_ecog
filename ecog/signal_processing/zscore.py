@@ -1,6 +1,10 @@
+import os
+
 import numpy as np
 
-import .utils
+from scipy.io import loadmat
+
+from ecog import utils
 
 
 def load_baseline(block_path, data, tt_data):
