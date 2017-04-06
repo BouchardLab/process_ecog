@@ -7,6 +7,9 @@ from scipy.io import loadmat
 __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 
 
+__all__ = ['load_electrode_labels', 'load_bad_electrodes']
+
+
 def load_electrode_labels(subj_dir):
     """
     Get anatomy. Try newest format, and then progressively earlier formats.

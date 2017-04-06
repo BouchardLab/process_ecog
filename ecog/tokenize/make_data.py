@@ -5,10 +5,10 @@ import numpy as np
 import scipy as sp
 from scipy.io import loadmat
 
-from ..signal_processing import resample
-from ..utils import bands, HTK, utils
-from ..utils.electrodes import load_bad_electrodes
-import transcripts
+import ecog.utils
+from ..signal_processing import resample, zscore
+from ..utils import (bands, HTK
+        load_bad_electrodes, load_bad_times, zscore)
 
 __author__ = 'David Conant, Jesse Livezey'
 
@@ -219,61 +219,6 @@ def run_extract_windows(block_path, event_times, align_window,
     return options[data_type]()
 
 
-def load_baseline(block_path, data, tt_data):
-    baseline_file = os.path.join(block_path, 'baselineTime.mat')
-    d = loadmat(baseline_file)
-    baseline_time = d['baselineTime'].astype(float)[0]
-    data_time = utils.is_in(tt_data, baseline_time)
-    return data[..., data_time]
-
-
-def zscore(data, axis=-1, mode=None, sampling_freq=None, bad_times=None,
-           align_window=None, all_event_times=None, **kwargs):
-
-    if ((mode is None) or (mode.lower() == 'none')):
-        mode = 'events'
-
-    if mode == 'whole':
-        baseline = data
-    elif mode == 'between_data':
-        tt_data = np.arange(data.shape[axis]) / sampling_freq
-        data_start = all_event_times.min() + align_window[0]
-        data_stop = all_event_times.max() + align_window[1]
-        data_time = utils.is_in(tt_data, np.array([data_start, data_stop]))
-        for bt in bad_times:
-            data_time = data_time & ~utils.is_in(tt_data, bt)
-        for et in all_event_times:
-            data_time = data_time & ~utils.is_in(tt_data, et + align_window)
-        baseline = data[..., data_time]
-    elif mode == 'data':
-        tt_data = np.arange(data.shape[-1]) / sampling_freq
-        data_start = all_event_times.min() + align_window[0]
-        data_stop = all_event_times.max() + align_window[1]
-        data_time = utils.is_in(tt_data, np.array([data_start, data_stop]))
-        for bt in bad_times:
-            data_time = data_time & ~utils.is_in(tt_data, bt)
-        baseline = data[..., data_time]
-    elif mode == 'events':
-        tt_data = np.arange(data.shape[-1]) / sampling_freq
-        data_time = np.zeros_like(tt_data, dtype=bool)
-        for et in all_event_times:
-            data_time = data_time | utils.is_in(tt_data, et + align_window)
-        for bt in bad_times:
-            data_time = data_time & ~utils.is_in(tt_data, bt)
-        baseline = data[..., data_time]
-    elif mode == 'file':
-        tt_data = np.arange(data.shape[axis]) / sampling_freq
-        baseline = load_baseline(kwargs['block_path'], data, tt_data)
-    else:
-        raise ValueError('zscore_mode type {} not recognized.'.format(mode))
-
-    means = baseline.mean(axis=axis, keepdims=True)
-    stds = baseline.std(axis=axis, keepdims=True)
-    data = (data - means) / stds
-
-    return data, means, stds
-
-
 def extract_windows(data, sampling_freq, event_times, align_window=None,
                     bad_times=None, bad_electrodes=None):
     """
@@ -460,7 +405,7 @@ def load_neuro(block_path):
     return X, fs
 
 
-def loadForm(block_path):
+def load_formant(block_path):
     fname = glob.glob(os.path.join(block_path, 'Analog',
                                    '*.ifc_out.txt'))
     F = []
@@ -498,37 +443,3 @@ def load_anatomy(subj_dir):
         raise ValueError('Could not find anatomy file in {}.'.format(subj_dir))
 
     return electrode_labels
-
-
-def load_bad_times(block_path):
-    """
-    Load bad time segments.
-
-    Parameters
-    ----------
-    block_path : str
-        Path to block to load bad electrodes from.
-
-    Returns
-    -------
-    bad_times : ndarray
-        Pairs of start and stop times for bad segments.
-    """
-
-    bad_times = []
-    try:
-        lab_time_conversion = transcripts.lab_time_conversion
-        with open(os.path.join(block_path, 'Artifacts',
-                               'bad_time_segments.lab'), 'rt') as f:
-            lines = f.readlines()
-            for line in lines:
-                if 'e' in line:
-                    start, stop = line.split(' ')[:2]
-                    bad_times.append([float(start)/lab_time_conversion,
-                                      float(stop)/lab_time_conversion])
-    except IOError:
-        return np.array([])
-
-    bad_times = np.array(bad_times)
-
-    return bad_times

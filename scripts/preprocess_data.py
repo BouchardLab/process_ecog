@@ -13,8 +13,8 @@ except:
 from ecog.utils import HTK
 from ecog.signal_processing import resample
 import ecog.signal_processing.subtract_CAR as scar
-import ecog.signal_processing.apply_linenoise_notch as notch
-import ecog.signal_processing.apply_hilbert_transform as aht
+from ecog.signal_processing import linenoise_notch
+from ecog.signal_processing import hilbert_transform
 from ecog.signal_processing.apply_hilbert_transform import gaussian, hamming
 from ecog.utils import load_bad_electrodes, bands
 
@@ -166,7 +166,7 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
 
     # Apply Notch filters
     start = time.time()
-    X = notch.apply_linenoise_notch(X, rate)
+    X = linenoise_notch.apply_linenoise_notch(X, rate)
     print('Notch filter time for {}: {} seconds'.format(block_name,
                                                         time.time()-start))
 
@@ -195,7 +195,7 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
                                                      note,
                                                      total=len(min_freqs))):
                 kernel = hamming(X, rate, min_f, max_f)
-                dset[ii] = aht.apply_hilbert_transform(X, rate, kernel)
+                dset[ii] = hilbert_transform(X, rate, kernel)
 
             dset.dims[0].label = 'band'
             dset.dims[1].label = 'channel'
@@ -215,7 +215,7 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
                                                note,
                                                total=len(cfs))):
                 kernel = gaussian(X, rate, min_f, max_f)
-                dset[ii] = aht.apply_hilbert_transform(X, rate, kernel)
+                dset[ii] = hilbert_transform(X, rate, kernel)
 
             dset.dims[0].label = 'filter'
             dset.dims[1].label = 'channel'
