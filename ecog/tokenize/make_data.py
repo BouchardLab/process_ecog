@@ -284,32 +284,31 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
             h5_path = os.path.join(block_path,
                                    blank_h5.format(fband))
             htk_path = os.path.join(block_path, 'HilbReal_4to200_40band')
+            idx = fband
         else:
             blank_h5 = 'HilbAA_70to150_8band_{}.h5'
             h5_path = os.path.join(block_path,
                                    blank_h5.format(fband-29))
             htk_path = os.path.join(block_path, 'HilbAA_70to150_8band')
+            idx = fband - 29
 
         if not os.path.isfile(h5_path):
             if not os.path.isfile(htk_path):
                 ecog400_path = os.path.join(block_path,
                                             '{}_Hilb.h5'.format(block))
                 with h5py.File(ecog400_path) as f:
-                    d = f['X'].value
+                    data = f['X'][idx]
                     sampling_rate = f.attrs['sampling_rate']
             else:
                 d = HTK.read_HTKs(htk_path)
-                data = d['data']
+                data = d['data'][idx]
                 sampling_rate = d['sampling_rate']
 
-            for ii in range(data.shape[0]):
-                h5_path = os.path.join(block_path,
-                                       blank_h5.format(ii))
-                tmp_path = h5_path + '_tmp'
-                with h5py.File(tmp_path, 'w') as f:
-                    f.create_dataset('data', data=d[ii])
-                    f.create_dataset('sampling_rate', data=sampling_rate)
-                os.rename(tmp_path, h5_path)
+            tmp_path = h5_path + '_tmp'
+            with h5py.File(tmp_path, 'w') as f:
+                f.create_dataset('data', data=np.real(data))
+                f.create_dataset('sampling_rate', data=sampling_rate)
+            os.rename(tmp_path, h5_path)
 
     for fband in fbands:
         if fband < 29 or fband > 36:
@@ -317,19 +316,25 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
             h5_path = os.path.join(block_path,
                                    blank_h5.format(fband))
             htk_path = os.path.join(block_path, 'HilbImag_4to200_40band')
+            idx = fband
 
             if not os.path.isfile(h5_path):
-                d = HTK.read_HTKs(htk_path)
-                data = d['data']
-                sampling_rate = d['sampling_rate']
-                for ii in range(data.shape[0]):
-                    h5_path = os.path.join(block_path,
-                                           blank_h5.format(ii))
-                    tmp_path = h5_path + '_tmp'
-                    with h5py.File(tmp_path, 'w') as f:
-                        f.create_dataset('data', data=d[ii])
-                        f.create_dataset('sampling_rate', data=sampling_rate)
-                    os.rename(tmp_path, h5_path)
+                if not os.path.isfile(htk_path):
+                    ecog400_path = os.path.join(block_path,
+                                                '{}_Hilb.h5'.format(block))
+                    with h5py.File(ecog400_path) as f:
+                        data = f['X'][idx]
+                        sampling_rate = f.attrs['sampling_rate']
+                else:
+                    d = HTK.read_HTKs(htk_path)
+                    data = d['data'][idx]
+                    sampling_rate = d['sampling_rate']
+
+                tmp_path = h5_path + '_tmp'
+                with h5py.File(tmp_path, 'w') as f:
+                    f.create_dataset('data', data=np.imag(data))
+                    f.create_dataset('sampling_rate', data=sampling_rate)
+                os.rename(tmp_path, h5_path)
 
     print('rewrite htk', time.time()-start)
 
@@ -346,11 +351,11 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
 
             with h5py.File(real_path, 'r') as f:
                 real = f['data'].value
-                rfs = f['sampling_rate'][0]
+                rfs = np.asscalar(f['sampling_rate'].value)
 
             with h5py.File(imag_path, 'r') as f:
                 imag = f['data'].value
-                ifs = f['sampling_rate'][0]
+                ifs = np.asscalar(f['sampling_rate'].value)
 
             assert np.allclose(rfs, ifs)
             fs = rfs
@@ -363,7 +368,7 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
 
             with h5py.File(aa_path, 'r') as f:
                 X = f['data'].value
-                fs = f['sampling_rate'][0]
+                fs = np.asscalar(f['sampling_rate'].value)
 
         if target_fs is not None:
             if not np.allclose(target_fs, fs):

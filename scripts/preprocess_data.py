@@ -211,12 +211,11 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
             dset = f.create_dataset('X', (len(cfs),
                                     X.shape[0], X.shape[1]),
                                     np.complex, compression="gzip")
-            kernels = []
             for ii, (cf, sd) in enumerate(tqdm(zip(cfs, sds),
                                                note,
                                                total=len(cfs))):
-                kernels.append(gaussian(X, rate, cf, sd))
-            dset[ii] = hilbert_transform(X, rate, kernels)
+                kernel = gaussian(X, rate, cf, sd)
+                dset[ii] = hilbert_transform(X, rate, kernel)
 
             dset.dims[0].label = 'filter'
             dset.dims[1].label = 'channel'
