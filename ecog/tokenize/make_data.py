@@ -294,20 +294,16 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
             idx = fband - 29
 
         if not os.path.isfile(h5_path):
-            print('one', h5_path)
-            print('three', htk_path)
             if not os.path.isdir(htk_path):
                 ecog400_path = os.path.join(block_path,
                                             '{}_Hilb.h5'.format(block))
-                print('two', ecog400_path)
                 with h5py.File(ecog400_path) as f:
                     data = f['X'][idx]
                     sampling_rate = f.attrs['sampling_rate']
             else:
-                print('three', htk_path)
                 d = HTK.read_HTKs(htk_path)
                 data = d['data'][idx]
-                sampling_rate = d['sampling_rate']
+                sampling_rate = d['sampling_rate'] / srf
 
             tmp_path = h5_path + '_tmp'
             with h5py.File(tmp_path, 'w') as f:
@@ -333,7 +329,7 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
                 else:
                     d = HTK.read_HTKs(htk_path)
                     data = d['data'][idx]
-                    sampling_rate = d['sampling_rate']
+                    sampling_rate = d['sampling_rate'] / srf
 
                 tmp_path = h5_path + '_tmp'
                 with h5py.File(tmp_path, 'w') as f:
