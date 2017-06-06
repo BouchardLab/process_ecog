@@ -278,6 +278,7 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
         fbands = [fbands]
 
     start = time.time()
+    print(block, fbands)
     for fband in fbands:
         if fband < 29 or fband > 36:
             blank_h5 = 'HilbReal_4to200_40band_{}.h5'
@@ -293,13 +294,17 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
             idx = fband - 29
 
         if not os.path.isfile(h5_path):
-            if not os.path.isfile(htk_path):
+            print('one', h5_path)
+            print('three', htk_path)
+            if not os.path.isdir(htk_path):
                 ecog400_path = os.path.join(block_path,
                                             '{}_Hilb.h5'.format(block))
+                print('two', ecog400_path)
                 with h5py.File(ecog400_path) as f:
                     data = f['X'][idx]
                     sampling_rate = f.attrs['sampling_rate']
             else:
+                print('three', htk_path)
                 d = HTK.read_HTKs(htk_path)
                 data = d['data'][idx]
                 sampling_rate = d['sampling_rate']
@@ -319,7 +324,7 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
             idx = fband
 
             if not os.path.isfile(h5_path):
-                if not os.path.isfile(htk_path):
+                if not os.path.isdir(htk_path):
                     ecog400_path = os.path.join(block_path,
                                                 '{}_Hilb.h5'.format(block))
                     with h5py.File(ecog400_path) as f:
