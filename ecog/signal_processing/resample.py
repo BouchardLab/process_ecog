@@ -1,6 +1,6 @@
 from __future__ import division
 import numpy as np
-from resample_clone import resample as resample_func
+from .resample_clone import resample as resample_func
 
 __authors__ = "Alex Bujan"
 
