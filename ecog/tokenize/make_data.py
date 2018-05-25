@@ -293,12 +293,12 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
             htk_path = os.path.join(block_path, 'HilbAA_70to150_8band')
             idx = fband - 29
 
-        if not os.path.isfile(h5_path):
+        if False or not os.path.isfile(h5_path):
             if not os.path.isdir(htk_path):
-                ecog400_path = os.path.join(block_path,
-                                            '{}_Hilb.h5'.format(block))
-                with h5py.File(ecog400_path) as f:
-                    data = f['X'][idx]
+                ecog_hilb_path = os.path.join(block_path,
+                                              '{}_Hilb.h5'.format(block))
+                with h5py.File(ecog_hilb_path) as f:
+                    data = np.real(f['X'][idx])
                     sampling_rate = f.attrs['sampling_rate']
             else:
                 d = HTK.read_HTKs(htk_path)
@@ -307,7 +307,7 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
 
             tmp_path = h5_path + '_tmp'
             with h5py.File(tmp_path, 'w') as f:
-                f.create_dataset('data', data=np.real(data))
+                f.create_dataset('data', data=data)
                 f.create_dataset('sampling_rate', data=sampling_rate)
             os.rename(tmp_path, h5_path)
 
@@ -319,12 +319,12 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
             htk_path = os.path.join(block_path, 'HilbImag_4to200_40band')
             idx = fband
 
-            if not os.path.isfile(h5_path):
+            if False or not os.path.isfile(h5_path):
                 if not os.path.isdir(htk_path):
-                    ecog400_path = os.path.join(block_path,
-                                                '{}_Hilb.h5'.format(block))
-                    with h5py.File(ecog400_path) as f:
-                        data = f['X'][idx]
+                    ecog_hilb_path = os.path.join(block_path,
+                                                  '{}_Hilb.h5'.format(block))
+                    with h5py.File(ecog_hilb_path) as f:
+                        data = np.imag(f['X'][idx])
                         sampling_rate = f.attrs['sampling_rate']
                 else:
                     d = HTK.read_HTKs(htk_path)
@@ -333,7 +333,7 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
 
                 tmp_path = h5_path + '_tmp'
                 with h5py.File(tmp_path, 'w') as f:
-                    f.create_dataset('data', data=np.imag(data))
+                    f.create_dataset('data', data=data)
                     f.create_dataset('sampling_rate', data=sampling_rate)
                 os.rename(tmp_path, h5_path)
 
