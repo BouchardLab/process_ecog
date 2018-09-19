@@ -34,144 +34,89 @@ def run_extract_windows(block_path, event_times, align_window,
         Method for zscoring data.
     """
 
-    def neuro():
-        bad_electrodes = load_bad_electrodes(block_path)
-        bad_times = load_bad_times(block_path)
-        all_bands, fs = load_neuro(block_path)
-        all_bands = all_bands[..., :256, :]
+    bad_electrodes = load_bad_electrodes(block_path)
+    bad_times = load_bad_times(block_path)
 
-        neuro_bands = bands.neuro['bands']
-        min_freqs = bands.neuro['min_freqs']
-        max_freqs = bands.neuro['max_freqs']
+    chang_lab_cfs = bands.chang_lab['cfs']
+    min_freqs = bands.neuro['min_freqs']
+    max_freqs = bands.neuro['max_freqs']
+    HG_freq = bands.neuro['HG_freq']
 
-        D = dict()
-        final_fs = dict()
-        for b, minf, maxf, d in zip(neuro_bands, min_freqs, max_freqs,
-                                    all_bands):
-            target_fs = 2. * maxf
-            if np.allclose(target_fs, fs):
-                X = d
-            else:
-                assert target_fs < fs
-                X = resample.resample_ecog(d, target_fs, fs)
-            X, m, s = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
-                             align_window=align_window, mode=zscore_mode,
-                             all_event_times=all_event_times,
-                             block_path=block_path)
-            D[b] = extract_windows(X, target_fs, event_times, align_window,
-                                   bad_times=bad_times,
-                                   bad_electrodes=bad_electrodes)
-            final_fs[b] = target_fs
+    D = dict()
+    final_fs = dict()
+    bls = dict()
 
-        return neuro_bands, D, final_fs
-
-    def HG():
-        bad_electrodes = load_bad_electrodes(block_path)
-        bad_times = load_bad_times(block_path)
-
-        target_fs = bands.neuro['HG_freq']
-        b = 'high gamma'
-
-        X, fs = load_HG(block_path)
-        X = X[..., :256, :]
-        X = X.mean(axis=0)
-
-        if not np.allclose(target_fs, fs):
-            assert target_fs < fs
-            start = time.time()
-            X = resample.resample_ecog(X, target_fs, fs)
-            print('downsample', time.time()-start)
-        fs = target_fs
-
-        D = dict()
-        final_fs = dict()
-
-        X, m, s = zscore(X, sampling_freq=fs, bad_times=bad_times,
-                         align_window=align_window, mode=zscore_mode,
-                         all_event_times=all_event_times,
-                         block_path=block_path)
-
-        D[b] = extract_windows(X, target_fs, event_times, align_window,
-                               bad_times=bad_times,
-                               bad_electrodes=bad_electrodes)
-        final_fs[b] = target_fs
-
-        return ['high gamma'], D, final_fs
-
-    def AA_avg():
-        bad_electrodes = load_bad_electrodes(block_path)
-        bad_times = load_bad_times(block_path)
-
-        neuro_bands = bands.neuro['bands']
-        min_freqs = bands.neuro['min_freqs']
-        max_freqs = bands.neuro['max_freqs']
+    if data_type == 'AA_avg':
+        nbands = bands.neuro['bands']
         HG_freq = bands.neuro['HG_freq']
 
-        chang_lab_cfs = bands.chang_lab['cfs']
 
-        D = dict()
-        final_fs = dict()
-        means = dict()
-        stds = dict()
-        for b, minf, maxf in zip(neuro_bands, min_freqs, max_freqs):
+        for b, minf, maxf in zip(nbands, min_freqs, max_freqs):
             target_fs = (HG_freq * (minf + maxf) /
                          (max_freqs[-1] + min_freqs[-1]))
             start = time.time()
             idxs = np.nonzero((chang_lab_cfs > minf) *
                               (chang_lab_cfs < maxf))[0].tolist()
-            X, fs = load_AA_band_mean(block_path, idxs, target_fs)
+            X, fs = load_AA_band(block_path, idxs, target_fs)
 
             print('load', block_path, b, target_fs, time.time()-start)
             start = time.time()
-            X, m, s = zscore(X, sampling_freq=fs, bad_times=bad_times,
+            X, m, s, bl = zscore(X, sampling_freq=fs, bad_times=bad_times,
                              align_window=align_window, mode=zscore_mode,
                              all_event_times=all_event_times,
                              block_path=block_path)
-            print('zscore', block_path, fband, target_fs, time.time()-start)
+            X = X.mean(axis=0)
+            print('zscore', block_path, target_fs, time.time()-start)
             D[b] = extract_windows(X, target_fs, event_times, align_window,
                                    bad_times=bad_times,
                                    bad_electrodes=bad_electrodes)
             final_fs[b] = target_fs
-            means[b] = m
-            stds[b] = s
-        return neuro_bands, D, final_fs
+            bls[b] = bl
+    elif data_type == 'AA_ff':
+        nbands = list(range(40))
+        target_fs = HG_freq
 
-    def AA():
-        bad_electrodes = load_bad_electrodes(block_path)
-        bad_times = load_bad_times(block_path)
+        for ii in nbands:
+            start = time.time()
+            idxs = [ii]
+            X, fs = load_AA_band(block_path, idxs, target_fs)
 
-        min_freqs = bands.neuro['min_freqs']
-        max_freqs = bands.neuro['max_freqs']
-        HG_freq = bands.neuro['HG_freq']
-
-        chang_lab_cfs = bands.chang_lab['cfs']
-
-        D = dict()
-        final_fs = dict()
-
+            print('load', block_path, ii, target_fs, time.time()-start)
+            start = time.time()
+            X, m, s, bl = zscore(X, sampling_freq=fs, bad_times=bad_times,
+                             align_window=align_window, mode=zscore_mode,
+                             all_event_times=all_event_times,
+                             block_path=block_path)
+            X = X.mean(axis=0)
+            print('zscore', block_path, target_fs, time.time()-start)
+            D[ii] = extract_windows(X, target_fs, event_times, align_window,
+                                    bad_times=bad_times,
+                                    bad_electrodes=bad_electrodes)
+            final_fs[ii] = target_fs
+            bls[ii] = bl
+    elif data_type == 'AA':
+        nbands = [fband]
         target_fs = (HG_freq * 2. * chang_lab_cfs[fband] /
                      (max_freqs[-1] + min_freqs[-1]))
         start = time.time()
-        X, fs = load_AA_band_mean(block_path, fband, target_fs)
+        X, fs = load_AA_band(block_path, fband, target_fs)
         print('load', block_path, fband, target_fs, time.time()-start)
         start = time.time()
-        X, m, s = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
+        X, m, s, bl = zscore(X, sampling_freq=target_fs, bad_times=bad_times,
                          align_window=align_window, mode=zscore_mode,
                          all_event_times=all_event_times,
                          block_path=block_path)
+        X = X.mean(axis=0)
         print('zscore', block_path, fband, target_fs, time.time()-start)
         D[fband] = extract_windows(X, target_fs, event_times, align_window,
                                    bad_times=bad_times,
                                    bad_electrodes=bad_electrodes)
         final_fs[fband] = target_fs
-        return [fband], D, final_fs
+        bls[fband] = bl
+    else:
+        raise ValueError
 
-    options = {'HG': HG,
-               'AA': AA,
-               'AA_avg': AA_avg,
-               'neuro': neuro}
-
-    return options[data_type]()
+    return nbands, D, final_fs, bls
 
 
 def extract_windows(data, sampling_freq, event_times, align_window=None,
@@ -255,7 +200,7 @@ def extract_windows(data, sampling_freq, event_times, align_window=None,
     return D
 
 
-def load_AA_band_mean(block_path, fbands, target_fs=None):
+def load_AA_band(block_path, fbands, target_fs=None):
     """
     Reads in analytic amplitude data.
 
@@ -278,7 +223,6 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
         fbands = [fbands]
 
     start = time.time()
-    print(block, fbands)
     for fband in fbands:
         if fband < 29 or fband > 36:
             blank_h5 = 'HilbReal_4to200_40band_{}.h5'
@@ -293,12 +237,15 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
             htk_path = os.path.join(block_path, 'HilbAA_70to150_8band')
             idx = fband - 29
 
-        if False or not os.path.isfile(h5_path):
+        if not os.path.isfile(h5_path):
             if not os.path.isdir(htk_path):
                 ecog_hilb_path = os.path.join(block_path,
                                               '{}_Hilb.h5'.format(block))
                 with h5py.File(ecog_hilb_path) as f:
-                    data = np.real(f['X'][idx])
+                    if fband < 29 or fband > 36:
+                        data = np.real(f['X'][idx])
+                    else:
+                        data = abs(f['X'][idx])
                     sampling_rate = f.attrs['sampling_rate']
             else:
                 d = HTK.read_HTKs(htk_path)
@@ -319,7 +266,7 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
             htk_path = os.path.join(block_path, 'HilbImag_4to200_40band')
             idx = fband
 
-            if False or not os.path.isfile(h5_path):
+            if not os.path.isfile(h5_path):
                 if not os.path.isdir(htk_path):
                     ecog_hilb_path = os.path.join(block_path,
                                                   '{}_Hilb.h5'.format(block))
@@ -376,65 +323,12 @@ def load_AA_band_mean(block_path, fbands, target_fs=None):
                 assert target_fs < fs
                 start = time.time()
                 X = resample(X, target_fs, fs)
-                print('downsample', time.time()-start)
+                print('downsample', block_path, target_fs, fs, time.time()-start)
 
             fs = target_fs
-        Xs.append(X)
+        Xs.append(X.astype('float32'))
     print('load inner', time.time()-start)
-    X = np.stack(Xs).mean(axis=0)
-
-    return X, fs
-
-
-def load_HG(block_path):
-    """
-    Reads in HTK data.
-
-    Parameters
-    ----------
-    block_path : str
-        Path to block.
-
-    Returns
-    -------
-    hg : ndarray (n_channels, n_time)
-        High gamma data.
-    fs : float
-        Sampling frequency of data.
-    """
-
-    htk_path = os.path.join(block_path, 'HilbAA_70to150_8band')
-    HTKout = HTK.read_HTKs(htk_path)
-    hg = HTKout['data']
-    # Frequency in Hz
-    fs = HTKout['sampling_rate']/srf
-
-    return hg, fs
-
-
-def load_neuro(block_path):
-    """
-    Reads in neuro band data from
-    hdf5 file.
-
-    Parameters
-    ----------
-    block_path : str
-        Path to block.
-
-    Returns
-    -------
-    X : ndarray (n_bands, n_channels, n_time)
-        Neural data
-    fs : float
-        Sampling frequency of data.
-    """
-    subject_path, block = os.path.split(block_path)
-    neuro_path = os.path.join(block_path,
-                              bands.neuro['block_path'].format(block))
-    with h5py.File(neuro_path, 'r') as f:
-        X = f['X'].value
-        fs = f.attrs['sampling_rate']
+    X = np.stack(Xs).astype('float32')
 
     return X, fs
 
@@ -466,7 +360,8 @@ def load_anatomy(subj_dir):
             for n, labels in zip(names, anatomy[0][0]):
                 electrode_labels[n] = np.array(labels).ravel()
         except ValueError:
-            with h5py.File(anatomy_filename[0]) as f:
+            print(anatomy_filename)
+            with h5py.File(anatomy_filename[0], 'r') as f:
                 for n in f['anatomy'].keys():
                     electrode_labels[n] = f['anatomy'][n].value
     elif elect_labels_filename:

@@ -18,8 +18,8 @@ def load_baseline(block_path, data, tt_data):
 def zscore(data, axis=-1, mode=None, sampling_freq=None, bad_times=None,
            align_window=None, all_event_times=None, **kwargs):
 
-    if ((mode is None) or (mode.lower() == 'none')):
-        mode = 'events'
+    if mode is None:
+        mode = 'file'
 
     if mode == 'whole':
         baseline = data
@@ -52,6 +52,19 @@ def zscore(data, axis=-1, mode=None, sampling_freq=None, bad_times=None,
     elif mode == 'file':
         tt_data = np.arange(data.shape[axis]) / sampling_freq
         baseline = load_baseline(kwargs['block_path'], data, tt_data)
+    elif mode == 'ratio':
+        tt_data = np.arange(data.shape[axis]) / sampling_freq
+        baseline = load_baseline(kwargs['block_path'], data, tt_data)
+        means = baseline.mean(axis=axis, keepdims=True)
+        stds = baseline.std(axis=axis, keepdims=True)
+        data = data / means
+        return data, means, stds, baseline
+    elif mode == 'none':
+        tt_data = np.arange(data.shape[axis]) / sampling_freq
+        baseline = load_baseline(kwargs['block_path'], data, tt_data)
+        means = baseline.mean(axis=axis, keepdims=True)
+        stds = baseline.std(axis=axis, keepdims=True)
+        return data, means, stds, baseline
     else:
         raise ValueError('zscore_mode type {} not recognized.'.format(mode))
 
@@ -59,4 +72,4 @@ def zscore(data, axis=-1, mode=None, sampling_freq=None, bad_times=None,
     stds = baseline.std(axis=axis, keepdims=True)
     data = (data - means) / stds
 
-    return data, means, stds
+    return data, means, stds, baseline

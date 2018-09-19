@@ -27,7 +27,8 @@ setup(
     install_requires = [
       'h5py',
       'numpy',
-      'scipy']
+      'scipy',
+      'pandas']
     )
 """
 # To provide executable scripts, use entry points in preference to the

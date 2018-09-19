@@ -75,7 +75,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     else:
         raise ValueError('Task must of one of {}: {}'.format(tasks, task))
 
-    data_types = ['HG', 'AA', 'AA_avg', 'neuro', 'narrow_neuro']
+    data_types = ['AA', 'AA_avg', 'AA_ff']
     if data_type not in data_types:
         raise ValueError('Data_type must be one of {}: {}'.format(data_types,
                                                                   data_type))
@@ -115,7 +115,6 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
 
     anat = make_data.load_anatomy(path)
 
-
     blocks = [int(block) for block in blocks]
     args = [(subject, block, path, tokens, align_pos,
              align_window, data_type, zscore, fband) for block in blocks]
@@ -140,25 +139,40 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         assert len(block_fs) == len(b_fs)
         assert set(block_fs) == set(b_fs)
 
-
-    data = dict((b_id, np.array([], dtype=np.complex)) for b_id in band_ids)
     labels = dict((b_id, np.array([], dtype=int)) for b_id in band_ids)
     block_numbers = dict((b_id, np.array([], dtype=int)) for b_id in band_ids)
 
-    for _, d, l, n, _ in results:
+    n_trials = 0
+    shapes = dict()
+    dtype = results[0][1][band_ids[0]].dtype
+
+    for _, d, l, n, _, bl in results:
+        n_trials += d[band_ids[0]].shape[0]
         for b_id in band_ids:
-            if data[b_id].size == 0:
-                data[b_id] = d[b_id]
-            else:
-                data[b_id] = np.vstack((data[b_id], d[b_id]))
+            shapes[b_id] = d[b_id].shape[1:]
+
+    data = dict((b_id, np.zeros((n_trials,) + shapes[b_id],
+                                dtype=dtype)) for b_id in band_ids)
+
+    bls = dict()
+    idx = 0
+    for _, d, l, n, _, bl in results:
+        bls_b = dict()
+        for b_id in band_ids:
+            bls_b[b_id] = bl[b_id]
+            data[b_id][idx:idx + d[b_id].shape[0]] = d[b_id]
+
             if labels[b_id].size == 0:
                 labels[b_id] = l
             else:
                 labels[b_id] = np.hstack((labels[b_id], l))
+
             if block_numbers[b_id].size == 0:
                 block_numbers[b_id] = n
             else:
                 block_numbers[b_id] = np.hstack((block_numbers[b_id], n))
+        idx += d[b_id].shape[0]
+        bls[n[0]] = bls_b
 
     test_label = labels[band_ids[0]]
     test_block = block_numbers[band_ids[0]]
@@ -169,7 +183,8 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
     block_numbers = test_block
 
     print('Saving to: {}'.format(fname))
-    save_hdf5(fname, data, labels, tokens, block_numbers, block_fs, anat, data_type)
+    save_hdf5(fname, data, labels, tokens, block_numbers, block_fs,
+              anat, data_type, bls)
 
 
 def process_block(args):
@@ -226,17 +241,22 @@ def process_block(args):
     event_times = event_times[idx]
     event_labels = event_labels[idx]
 
-    band_ids, data, fs = make_data.run_extract_windows(blockpath, event_times,
-                                                       align_window, data_type,
-                                                       zscore, all_event_times, fband)
+    rval = make_data.run_extract_windows(blockpath, event_times,
+                                         align_window, data_type,
+                                         zscore, all_event_times,
+                                         fband)
+    band_ids, data, fs, bl = rval
+
     for k, v in data.iteritems():
-        assert v.shape[0] == event_labels.shape[0], ('shapes', k, v.shape, event_labels.shape)
+        assert v.shape[0] == event_labels.shape[0], ('shapes', k, v.shape,
+                                                     event_labels.shape)
     bn = np.full(data.values()[0].shape[0], block, dtype=int)
 
-    return band_ids, data, event_labels, bn, fs
+    return band_ids, data, event_labels, bn, fs, bl
 
 
-def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs, anat, data_type):
+def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs,
+              anat, data_type, baselines):
     """
     Save processed data to hdf5.
 
@@ -257,72 +277,43 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs, anat, data_t
     except OSError:
         pass
     fname_tmp = fname + '.tmp'
-    if data_type in ['neuro', 'narrow_neuro', 'AA_avg']:
-        neuro_bands = bands.neuro['bands']
-        block_fs = np.array([block_fs[b] for b in neuro_bands], dtype=float)
-        min_freqs = bands.neuro['min_freqs']
-        max_freqs = bands.neuro['max_freqs']
-        with h5py.File(fname_tmp, 'w') as f:
+    band_ids = sorted(data.keys())
+    block_fs = np.array([block_fs[b] for b in band_ids], dtype=float)
+    with h5py.File(fname_tmp, 'w') as f:
+        if data_type in ['AA_avg', 'AA_ff']:
             for b, d in data.iteritems():
                 dset = f.create_dataset('X{}'.format(b), data=d)
                 dset.dims[0].label = 'batch'
                 dset.dims[1].label = 'electrode'
                 dset.dims[2].label = 'time'
-            f.create_dataset('y', data=labels)
-            f.create_dataset('block', data=block_numbers)
-            f.create_dataset('tokens', data=tokens)
-            f.create_dataset('min_freqs', data=np.array(min_freqs))
-            f.create_dataset('max_freqs', data=np.array(max_freqs))
-            f.create_dataset('bands', data=np.array(neuro_bands))
-            f.create_dataset('sampling_freqs', data=np.array(block_fs))
-            grp = f.create_group('anatomy')
-            for key, value in anat.iteritems():
-                grp.create_dataset(key, data=value)
-    elif data_type == 'AA':
-        neuro_bands = bands.neuro['bands']
-        band_ids = sorted(data.keys())
-        block_fs = np.array([block_fs[b] for b in band_ids], dtype=float)
-        min_freqs = bands.neuro['min_freqs']
-        max_freqs = bands.neuro['max_freqs']
-        print(band_ids)
-        print(neuro_bands)
-        with h5py.File(fname_tmp, 'w') as f:
-            for ii, d in data.iteritems():
-                b = neuro_bands[ii]
-                dset = f.create_dataset('X{}'.format(b), data=d)
-                dset.dims[0].label = 'batch'
-                dset.dims[1].label = 'electrode'
-                dset.dims[2].label = 'time'
-            f.create_dataset('y', data=labels)
-            f.create_dataset('block', data=block_numbers)
-            f.create_dataset('tokens', data=tokens)
-            f.create_dataset('min_freqs', data=np.array(min_freqs))
-            f.create_dataset('max_freqs', data=np.array(max_freqs))
-            f.create_dataset('bands', data=np.array(neuro_bands))
-            f.create_dataset('sampling_freqs', data=np.array(block_fs))
-            grp = f.create_group('anatomy')
-            for key, value in anat.iteritems():
-                grp.create_dataset(key, data=value)
-    elif data_type == 'HG':
-        band_ids = sorted(data.keys())
-        block_fs = np.array([block_fs[b] for b in band_ids], dtype=float)
-        with h5py.File(fname_tmp, 'w') as f:
-            b = 'high gamma'
+            for n, block_bls in baselines.iteritems():
+                for b, bl in block_bls.iteritems():
+                    dset = f.create_dataset('bl_block_{}_band_{}'.format(n, b),
+                                            data=bl)
+            if data_type == 'AA_avg':
+                min_freqs = bands.neuro['min_freqs']
+                max_freqs = bands.neuro['max_freqs']
+                f.create_dataset('min_freqs', data=np.array(min_freqs))
+                f.create_dataset('max_freqs', data=np.array(max_freqs))
+        elif data_type == 'HG':
+            b = band_ids[0]
             d = data[b]
             dset = f.create_dataset('X{}'.format(b), data=d)
             dset.dims[0].label = 'batch'
             dset.dims[1].label = 'electrode'
             dset.dims[2].label = 'time'
-            f.create_dataset('y', data=labels)
-            f.create_dataset('block', data=block_numbers)
-            f.create_dataset('tokens', data=tokens)
-            f.create_dataset('bands', data=np.array([b]))
-            f.create_dataset('sampling_freqs', data=np.array(block_fs))
-            grp = f.create_group('anatomy')
-            for key, value in anat.iteritems():
-                grp.create_dataset(key, data=value)
-    else:
-        raise ValueError
+        else:
+            raise ValueError
+
+        f.create_dataset('y', data=labels)
+        f.create_dataset('block', data=block_numbers)
+        f.create_dataset('tokens', data=tokens)
+        f.create_dataset('bands', data=np.array(band_ids))
+        f.create_dataset('sampling_freqs', data=np.array(block_fs))
+        grp = f.create_group('anatomy')
+        for key, value in anat.iteritems():
+            grp.create_dataset(key, data=value)
+
     os.rename(fname_tmp, fname)
 
 
