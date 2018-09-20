@@ -80,6 +80,7 @@ def hilbert_transform(X, rate, filters=None):
         if f is None:
             Xh[ii] = ifft(X_fft_h)
         else:
+            f = f / f.sum()
             Xh[ii] = ifft(X_fft_h * f)
     if Xh.shape[0] == 1:
         return Xh[0]

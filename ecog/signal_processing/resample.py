@@ -1,5 +1,6 @@
 from __future__ import division
 import numpy as np
+import scipy as sp
 from .resample_clone import resample as resample_func
 
 __authors__ = "Alex Bujan"
@@ -7,7 +8,7 @@ __authors__ = "Alex Bujan"
 __all__ = ['resample']
 
 
-def resample(X, new_freq, old_freq, axis=-1):
+def resample(X, new_freq, old_freq, axis=-1, same_sign=False):
     """
     Resamples the ECoG signal from the original
     sampling frequency to a new frequency.
@@ -29,7 +30,7 @@ def resample(X, new_freq, old_freq, axis=-1):
         Downsampled data, dimensions (n_channels, ..., n_timePoints_new)
     """
     ratio = float(old_freq) / new_freq
-    if np.allclose(ratio, int(ratio)):
+    if np.allclose(ratio, int(ratio)) and same_sign:
         ratio = int(ratio)
         if (ratio % 2) == 0:
             med = ratio + 1
