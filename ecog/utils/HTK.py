@@ -145,7 +145,7 @@ def write_HTK(file_data, file_path, data_type='HTK', big_endian=True,
         # Writes the data
         np.array(data, dtype=endian+'f4').T.tofile(f)
 
-def read_HTKs(dir_path, electrodes=None):
+def read_HTKs(dir_path, electrodes=None, fbands=None):
     """
     Reads all of the HTK files in a directory, takes the mean,
     and outputs a matrix that contains all of the channels together
@@ -168,14 +168,20 @@ def read_HTKs(dir_path, electrodes=None):
 
     htkout = read_HTK(os.path.join(dir_path, 'Wav11.htk'))
     num_fbands, num_samples = htkout['data'].shape
-
-    alldata = np.zeros((num_fbands, len(electrodes), num_samples))
+    
+    if fbands is None:
+        alldata = np.zeros((num_fbands, len(electrodes), num_samples))
+    else:
+        alldata = np.zeros((len(fbands), len(electrodes), num_samples))
 
     for ifile in electrodes:
         htkout = read_HTK(os.path.join(dir_path,
                                        'Wav{}{}.htk'.format(int(np.ceil((ifile+1)/64.)),
                                                             np.mod(ifile, 64)+1)))
-        alldata[:,ifile,:] = htkout['data']
+        if fbands is None:
+            alldata[:,ifile,:] = htkout['data']
+        else:
+            alldata[:,ifile,:] = htkout['data'][fbands]
 
     return {'num_samples':    htkout['num_samples'],
             'sampling_rate':  float(htkout['sampling_rate']),

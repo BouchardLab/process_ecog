@@ -16,7 +16,8 @@ srf = HTK.SAMPLING_RATE_FACTOR
 
 def run_extract_windows(block_path, event_times, align_window,
                         data_type, zscore_mode='events',
-                        all_event_times=None, fband=None):
+                        all_event_times=None, fband=None,
+                        phase=False):
     """
     Extract requested data type.
 
@@ -50,7 +51,6 @@ def run_extract_windows(block_path, event_times, align_window,
         nbands = bands.neuro['bands']
         HG_freq = bands.neuro['HG_freq']
 
-
         for b, minf, maxf in zip(nbands, min_freqs, max_freqs):
             target_fs = (HG_freq * (minf + maxf) /
                          (max_freqs[-1] + min_freqs[-1]))
@@ -79,7 +79,7 @@ def run_extract_windows(block_path, event_times, align_window,
         for ii in nbands:
             start = time.time()
             idxs = [ii]
-            X, fs = load_AA_band(block_path, idxs, target_fs)
+            X, fs = load_AA_band(block_path, idxs, target_fs, phase)
 
             print('load', block_path, ii, target_fs, time.time()-start)
             start = time.time()
@@ -200,7 +200,7 @@ def extract_windows(data, sampling_freq, event_times, align_window=None,
     return D
 
 
-def load_AA_band(block_path, fbands, target_fs=None):
+def load_AA_band(block_path, fbands, target_fs=None, phase=False):
     """
     Reads in analytic amplitude data.
 
@@ -223,6 +223,7 @@ def load_AA_band(block_path, fbands, target_fs=None):
         fbands = [fbands]
 
     start = time.time()
+    """
     for fband in fbands:
         if fband < 29 or fband > 36:
             blank_h5 = 'HilbReal_4to200_40band_{}.h5'
@@ -237,8 +238,8 @@ def load_AA_band(block_path, fbands, target_fs=None):
             htk_path = os.path.join(block_path, 'HilbAA_70to150_8band')
             idx = fband - 29
 
-        if not os.path.isfile(h5_path):
-            if not os.path.isdir(htk_path):
+        if True or not os.path.isfile(h5_path):
+            if True or not os.path.isdir(htk_path):
                 ecog_hilb_path = os.path.join(block_path,
                                               '{}_Hilb.h5'.format(block))
                 with h5py.File(ecog_hilb_path) as f:
@@ -248,8 +249,8 @@ def load_AA_band(block_path, fbands, target_fs=None):
                         data = abs(f['X'][idx])
                     sampling_rate = f.attrs['sampling_rate']
             else:
-                d = HTK.read_HTKs(htk_path)
-                data = d['data'][idx]
+                d = HTK.read_HTKs(htk_path, fbands=[fband - 29])
+                data = d['data']
                 sampling_rate = d['sampling_rate'] / srf
 
             tmp_path = h5_path + '_tmp'
@@ -266,16 +267,16 @@ def load_AA_band(block_path, fbands, target_fs=None):
             htk_path = os.path.join(block_path, 'HilbImag_4to200_40band')
             idx = fband
 
-            if not os.path.isfile(h5_path):
-                if not os.path.isdir(htk_path):
+            if True or not os.path.isfile(h5_path):
+                if True or not os.path.isdir(htk_path):
                     ecog_hilb_path = os.path.join(block_path,
                                                   '{}_Hilb.h5'.format(block))
                     with h5py.File(ecog_hilb_path) as f:
                         data = np.imag(f['X'][idx])
                         sampling_rate = f.attrs['sampling_rate']
                 else:
-                    d = HTK.read_HTKs(htk_path)
-                    data = d['data'][idx]
+                    d = HTK.read_HTKs(htk_path, fbands=[fband - 29])
+                    data = d['data']
                     sampling_rate = d['sampling_rate'] / srf
 
                 tmp_path = h5_path + '_tmp'
@@ -283,12 +284,19 @@ def load_AA_band(block_path, fbands, target_fs=None):
                     f.create_dataset('data', data=data)
                     f.create_dataset('sampling_rate', data=sampling_rate)
                 os.rename(tmp_path, h5_path)
+    """
 
     print('rewrite htk', time.time()-start)
 
     Xs = []
-    start = time.time()
+    start1 = time.time()
+    phase_str = ''
+    if phase:
+        phase_str = '_random_phase'
+    ecog_hilb_path = os.path.join(block_path,
+                                  '{}_Hilb{}.h5'.format(block, phase_str))
     for fband in fbands:
+        """
         if fband < 29 or fband > 36:
             real_path = os.path.join(block_path,
                                      'HilbReal_4to200_40band' +
@@ -317,6 +325,10 @@ def load_AA_band(block_path, fbands, target_fs=None):
             with h5py.File(aa_path, 'r') as f:
                 X = f['data'].value
                 fs = np.asscalar(f['sampling_rate'].value)
+        """
+        with h5py.File(ecog_hilb_path) as f:
+            X = abs(f['X'][fband])
+            fs = f.attrs['sampling_rate']
 
         if target_fs is not None:
             if not np.allclose(target_fs, fs):
@@ -327,7 +339,7 @@ def load_AA_band(block_path, fbands, target_fs=None):
 
             fs = target_fs
         Xs.append(X.astype('float32'))
-    print('load inner', time.time()-start)
+    print('load inner', time.time()-start1)
     X = np.stack(Xs).astype('float32')
 
     return X, fs

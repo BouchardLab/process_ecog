@@ -17,6 +17,8 @@ from ecog.signal_processing import hilbert_transform
 from ecog.signal_processing import gaussian, hamming
 from ecog.utils import HTK, load_bad_electrodes, bands
 
+srf = HTK.SAMPLING_RATE_FACTOR
+
 
 __authors__ = "Alex Bujan (adapted from Kris Bouchard)"
 
@@ -36,20 +38,22 @@ def main():
                         help="Standard deviation of the Gaussian filter")
     parser.add_argument('-n', '--neuro', default=False, action='store_true',
                         help="Use standard neuroscience frequency bands")
-    parser.add_argument('--srf', type=float, default=1e4,
-                        help="Sampling rate factor. Read notes in HTK.py")
+    parser.add_argument('-e', '--phase', default=False, action='store_true',
+                        help="Apply random phases to the hilbert transform.")
     args = parser.parse_args()
+    print(args)
 
     for block in args.blocks:
         block_path = os.path.join(args.path, args.subject,
                                   '{}_B{}'.format(args.subject, block))
         transform(block_path, rate=args.rate,
                   cfs=args.cfs, sds=args.sds,
-                  neuro=args.neuro, srf=args.srf)
+                  neuro=args.neuro, phase=args.phase)
 
 
-def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
-              neuro=False, suffix=None, total_channels=256):
+def transform(block_path, rate=400., cfs=None, sds=None,
+              neuro=False, suffix=None, phase=False, total_channels=256,
+              seed=20180928):
     """
     Takes raw LFP data and does the standard hilb algorithm:
     1) CAR
@@ -65,10 +69,11 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
     rate
     cfs: filter center frequencies. If None, use Chang lab defaults
     sds: filer standard deviations. If None, use Chang lab defaults
-    srf: htk multiple
 
     takes about 20 minutes to run on 1 10-min block
     """
+
+    rng = np.random.RandomState(seed)
 
     if neuro:
         band_names = bands.neuro['bands']
@@ -105,14 +110,22 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
             X = resample.resample_ecog(X, rate, fs)
     except IOError:
         try:
-            # HDF5 .mat format
-            with h5py.File(mat_ecog_path, 'r') as f:
-                X = f['ecogDS']['data'][:].T
-                fs = f['ecogDS']['sampFreq'][0]
-                print('Load time for h5.mat {}:' +
-                      ' {} seconds'.format(block_name, time.time() - start))
-        except IOError:
+            # Load raw HTK files
+            rd_path = os.path.join(block_path, 'RawHTK')
+            HTKoutR = HTK.read_HTKs(rd_path)
+            X = HTKoutR['data'] * 1e6
+            fs = HTKoutR['sampling_rate'] / srf
+            print('Load time for htk {}: {} seconds'.format(block_name, time.time() - start))
+
+        except OSError:
             try:
+                # HDF5 .mat format
+                with h5py.File(mat_ecog_path, 'r') as f:
+                    X = f['ecogDS']['data'][:].T
+                    fs = f['ecogDS']['sampFreq'][0]
+                    print('Load time for h5.mat {}:' +
+                          ' {} seconds'.format(block_name, time.time() - start))
+            except IOError:
                 # Old .mat format
                 X = None
                 fs = None
@@ -124,23 +137,19 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
                         fs = data.item()[ii][0]
                 assert X is not None
                 assert fs is not None
-                print('Load time for mat {}:' +
-                      ' {} seconds'.format(block_name, time.time() - start))
-            except IOError:
-                # Load raw HTK files
-                rd_path = os.path.join(block_path, 'RawHTK')
-                HTKoutR = HTK.read_HTKs(rd_path)
-                X = HTKoutR['data']
-                fs = HTKoutR['sampling_rate'] / srf
-                print('Load time for htk {}:' +
-                      ' {} seconds'.format(block_name, time.time() - start))
+                print('Load time for mat {}: {} seconds'.format(block_name, time.time() - start))
+
         try:
             os.mkdir(os.path.join(block_path, 'ecog400'))
         except OSError:
             pass
         if not np.allclose(rate, fs):
             assert rate < fs
+            start1 = time.time()
             X = resample(X, rate, fs)
+            print('Downsample time for {}: {}, {}, {}'.format(block_name,
+                                                              time.time() - start1,
+                                                              rate, fs))
         if np.allclose(rate, 400.):
             start = time.time()
             with h5py.File(h5_ecog_tmp_path, 'w') as f:
@@ -148,10 +157,11 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
                 g.create_dataset('data', data=X)
                 g.create_dataset('sampFreq', data=rate)
             os.rename(h5_ecog_tmp_path, h5_ecog_path)
-            print('Save time for {}: {} seconds'.format(block_name,
-                                                        time.time()-start))
+            print('Save time for {}400: {} seconds'.format(block_name,
+                                                           time.time()-start))
 
-    assert X.shape[0] == total_channels, (block_name, X.shape)
+    if X.shape[0] != total_channels:
+        raise ValueError(block_name, X.shape, total_channels)
 
     bad_elects = load_bad_electrodes(block_path)
     if len(bad_elects) > 0:
@@ -174,22 +184,22 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
         suffix_str = ''
     else:
         suffix_str = '_{}'.format(suffix)
+    if phase:
+        suffix_str = suffix_str + '_random_phase'
     if neuro:
-        hilb_path = os.path.join(block_path,
-                                 '{}_neuro_Hilb{}.h5'.format(block_name,
-                                                             suffix_str))
+        fname = '{}_neuro_Hilb{}.h5'.format(block_name, suffix_str)
     else:
-        hilb_path = os.path.join(block_path,
-                                 '{}_Hilb{}.h5'.format(block_name,
-                                                       suffix_str))
-    tmp_path = os.path.join(block_path, '{}_tmp.h5'.format(block_name))
+        fname = '{}_Hilb{}.h5'.format(block_name, suffix_str)
+
+    hilb_path = os.path.join(block_path, fname)
+    tmp_path = os.path.join(block_path, '{}_tmp.h5'.format(fname))
 
     with h5py.File(tmp_path, 'w') as f:
         note = 'applying Hilbert transform'
         if neuro:
             dset = f.create_dataset('X', (len(band_names),
                                     X.shape[0], X.shape[1]),
-                                    np.complex, compression="gzip")
+                                    np.complex)
             kernels = []
             for ii, (min_f, max_f) in enumerate(tqdm(zip(min_freqs, max_freqs),
                                                      note,
@@ -210,12 +220,17 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
         else:
             dset = f.create_dataset('X', (len(cfs),
                                     X.shape[0], X.shape[1]),
-                                    np.complex, compression="gzip")
+                                    np.complex)
+            theta = None
+            if phase:
+                theta = rng.rand(*X.shape) * 2. * np.pi
+                theta = np.sin(theta) + 1j * np.cos(theta)
             for ii, (cf, sd) in enumerate(tqdm(zip(cfs, sds),
                                                note,
                                                total=len(cfs))):
                 kernel = gaussian(X, rate, cf, sd)
-                dset[ii] = hilbert_transform(X, rate, kernel)
+                Xp = hilbert_transform(X, rate, kernel, phase=theta)
+                dset[ii] = Xp
 
             dset.dims[0].label = 'filter'
             dset.dims[1].label = 'channel'
@@ -231,6 +246,7 @@ def transform(block_path, rate=400., cfs=None, sds=None, srf=1e4,
     os.rename(tmp_path, hilb_path)
 
     print('{} finished'.format(block_name))
+    print('saved: {}'.format(hilb_path))
 
 
 if __name__ == '__main__':

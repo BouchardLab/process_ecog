@@ -21,17 +21,18 @@ def main():
     parser.add_argument('-d', '--data_type', default='HG')
     parser.add_argument('-b', '--zscore', default='between_data')
     parser.add_argument('-m', '--mp', action='store_true', default=False)
+    parser.add_argument('-e', '--phase', action='store_true', default=False)
     parser.add_argument('-f', '--fband', type=int, default=None)
     args = parser.parse_args()
     htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
                 args.align_window, args.align_pos, args.data_type, args.zscore,
-                args.fband, args.mp)
+                args.fband, args.mp, args.phase)
 
 
 def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                 align_window=None, align_pos=0,
                 data_type='HG', zscore='events',
-                fband=None, mp=True):
+                fband=None, mp=True, phase=False):
     """
     Process task data into segments with labels.
 
@@ -99,12 +100,20 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         return rval
 
     folder, subject = os.path.split(os.path.normpath(path))
+
+    phase_str = ''
+    if phase:
+        phase_str = '_random_phase'
+
     if fband is None:
         fname = os.path.join(output_folder, 'hdf5',
-                             (subject + '_' + block_str(blocks) +
-                              task + '_' + data_type + '_' +
-                              align_window_str(align_window) + '_' +
-                              zscore + '.h5'))
+                             ('{}_{}_{}_{}_{}_{}{}.h5'.format(subject,
+                                                            block_str(blocks),
+                                                            task,
+                                                            data_type,
+                                                            align_window_str(align_window),
+                                                            zscore,
+                                                            phase_str)))
     else:
         fname = os.path.join(output_folder, 'hdf5',
                              (subject + '_' + block_str(blocks) +
@@ -117,7 +126,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
 
     blocks = [int(block) for block in blocks]
     args = [(subject, block, path, tokens, align_pos,
-             align_window, data_type, zscore, fband) for block in blocks]
+             align_window, data_type, zscore, fband, phase) for block in blocks]
     print('Numbers of blocks to be processed: {}'.format(len(blocks)))
 
     if mp and len(blocks) > 1:
@@ -199,7 +208,7 @@ def process_block(args):
     tokens : list of str
     """
     (subject, block, path, tokens, align_pos, align_window,
-     data_type, zscore, fband) = args
+     data_type, zscore, fband, phase) = args
 
     blockname = '{}_B{}'.format(subject, block)
     print('Processing subject {}'.format(subject))
@@ -244,7 +253,7 @@ def process_block(args):
     rval = make_data.run_extract_windows(blockpath, event_times,
                                          align_window, data_type,
                                          zscore, all_event_times,
-                                         fband)
+                                         fband, phase)
     band_ids, data, fs, bl = rval
 
     for k, v in data.iteritems():

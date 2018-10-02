@@ -18,16 +18,17 @@ __all__ = ['gaussian', 'hamming', 'hilbert_transform']
 
 
 def gaussian(X, rate, center, sd):
-    n_channels, time = X.shape
+    time = X.shape[-1]
     freq = fftfreq(time, 1./rate)
 
     k = np.exp((-(np.abs(freq) - center)**2)/(2 * (sd**2)))
+    k /= k.sum()
 
     return k
 
 
 def hamming(X, rate, min_freq, max_freq):
-    n_channels, time = X.shape
+    time = X.shape[-1]
     freq = fftfreq(time, 1./rate)
 
     pos_in_window = np.logical_and(freq >= min_freq, freq <= max_freq)
@@ -40,11 +41,12 @@ def hamming(X, rate, min_freq, max_freq):
     window_size = np.count_nonzero(neg_in_window)
     window = np.hamming(window_size)
     k[neg_in_window] = window
+    k /= k.sum()
 
     return k
 
 
-def hilbert_transform(X, rate, filters=None):
+def hilbert_transform(X, rate, filters=None, phase=None):
     """
     Apply bandpass filtering with Hilbert transform using
     a prespecified set of filters.
@@ -60,12 +62,12 @@ def hilbert_transform(X, rate, filters=None):
 
     Returns
     -------
-    Xc : array
-        Bandpassed analytical signal (dtype: complex)
+    Xh : ndarray, complex
+        Bandpassed analytic signal
     """
     if not isinstance(filters, list):
         filters = [filters]
-    n_channels, time = X.shape
+    time = X.shape[-1]
     freq = fftfreq(time, 1. / rate)
 
     # Heavyside filter
@@ -76,6 +78,8 @@ def hilbert_transform(X, rate, filters=None):
 
     Xh = np.zeros((len(filters),) + X.shape, dtype=np.complex)
     X_fft_h = fft(X) * h
+    if phase is not None:
+        X_fft_h *= phase
     for ii, f in enumerate(filters):
         if f is None:
             Xh[ii] = ifft(X_fft_h)

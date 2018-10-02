@@ -22,6 +22,7 @@ def subtract_CAR(X, b_size=16):
         X_2 = X[channels-r:]
         X_2 -= np.nanmean(X_2, axis=0, keepdims=True)
         X = np.vstack([X_1.reshape((s*b_size, time_points)), X_2])
+        return X
     else:
         return X_1.reshape((s*b_size, time_points))
 
