@@ -8,7 +8,7 @@ __authors__ = "Alex Bujan"
 __all__ = ['resample']
 
 
-def resample(X, new_freq, old_freq, kind, axis=-1, same_sign=False):
+def resample(X, new_freq, old_freq, kind=1, axis=-1, same_sign=False):
     """
     Resamples the ECoG signal from the original
     sampling frequency to a new frequency.

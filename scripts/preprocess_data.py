@@ -14,7 +14,7 @@ from ecog.signal_processing import resample
 from ecog.signal_processing import subtract_CAR
 from ecog.signal_processing import linenoise_notch
 from ecog.signal_processing import hilbert_transform
-from ecog.signal_processing import gaussian, hamming
+from ecog.signal_processing import gaussian
 from ecog.utils import HTK, load_bad_electrodes, bands
 
 srf = HTK.SAMPLING_RATE_FACTOR
