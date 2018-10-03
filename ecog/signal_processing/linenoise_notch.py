@@ -1,15 +1,9 @@
 from __future__ import division
 import numpy as np
 from scipy.signal import firwin2, filtfilt
-from numpy.fft import rfftfreq
 
-try:
-    from accelerate.mkl.fftpack import rfft, irfft
-except ImportError:
-    try:
-        from pyfftw.interfaces.numpy_fft import rfft, irfft
-    except ImportError:
-        from numpy.fft import rfft, irfft
+from .fft import rfftfreq, rfft, irfft
+
 
 
 __all__ = ['linenoise_notch']
