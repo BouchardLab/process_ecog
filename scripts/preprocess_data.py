@@ -85,7 +85,7 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
         print('rates {}: {} {}'.format(block_name, rate, fs))
         if not np.allclose(rate, fs):
             assert rate < fs
-            X = resample.resample_ecog(X, rate, fs)
+            X = resample(X, rate, fs)
     except IOError:
         try:
             # Load raw HTK files
@@ -182,8 +182,7 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
                                            note,
                                            total=len(cfs))):
             kernel = gaussian(X, rate, cf, sd)
-            Xp = hilbert_transform(X, rate, kernel, phase=theta)
-            dset[ii] = Xp
+            dset[ii] = hilbert_transform(X, rate, kernel, phase=theta)
 
         dset.dims[0].label = 'filter'
         dset.dims[1].label = 'channel'
