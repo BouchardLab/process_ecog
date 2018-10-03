@@ -30,14 +30,6 @@ def main():
     parser.add_argument('subject', type=str, help="Subject code")
     parser.add_argument('blocks', type=int, nargs='+',
                         help="Block number eg: '1'")
-    parser.add_argument('-r', '--rate', type=float, default=400.,
-                        help='Resample data to this rate.')
-    parser.add_argument('--cfs', type=float, default=None,
-                        help="Center frequency of the Gaussian filter")
-    parser.add_argument('--sds', type=float, default=None,
-                        help="Standard deviation of the Gaussian filter")
-    parser.add_argument('-n', '--neuro', default=False, action='store_true',
-                        help="Use standard neuroscience frequency bands")
     parser.add_argument('-e', '--phase', default=False, action='store_true',
                         help="Apply random phases to the hilbert transform.")
     args = parser.parse_args()
@@ -46,13 +38,10 @@ def main():
     for block in args.blocks:
         block_path = os.path.join(args.path, args.subject,
                                   '{}_B{}'.format(args.subject, block))
-        transform(block_path, rate=args.rate,
-                  cfs=args.cfs, sds=args.sds,
-                  neuro=args.neuro, phase=args.phase)
+        transform(block_path, phase=args.phase)
 
 
-def transform(block_path, rate=400., cfs=None, sds=None,
-              neuro=False, suffix=None, phase=False, total_channels=256,
+def transform(block_path, suffix=None, phase=False, total_channels=256,
               seed=20180928):
     """
     Takes raw LFP data and does the standard hilb algorithm:
@@ -74,22 +63,10 @@ def transform(block_path, rate=400., cfs=None, sds=None,
     """
 
     rng = np.random.RandomState(seed)
+    rate = 400.
 
-    if neuro:
-        band_names = bands.neuro['bands']
-        min_freqs = bands.neuro['min_freqs']
-        max_freqs = bands.neuro['max_freqs']
-    else:
-        bands.neuro = bands.chang_lab
-        if cfs is None:
-            cfs = bands.neuro['cfs']
-        else:
-            cfs = np.array(cfs)
-
-        if sds is None:
-            sds = bands.neuro['cfs']
-        else:
-            sds = np.array(sds)
+    cfs = bands.chang_lab['cfs']
+    sds = bands.chang_lab['cfs']
 
     subj_path, block_name = os.path.split(block_path)
 
@@ -98,6 +75,7 @@ def transform(block_path, rate=400., cfs=None, sds=None,
     h5_ecog_tmp_path = os.path.join(block_path, 'ecog400', 'ecog_tmp.h5')
     mat_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.mat')
     try:
+        raise IOError
         # HDF5 format
         with h5py.File(h5_ecog_path, 'r') as f:
             X = f['ecogDS']['data'].value
@@ -107,7 +85,7 @@ def transform(block_path, rate=400., cfs=None, sds=None,
         print('rates {}: {} {}'.format(block_name, rate, fs))
         if not np.allclose(rate, fs):
             assert rate < fs
-            X = resample.resample_ecog(X, rate, fs)
+            X = resample(X, rate, fs)
     except IOError:
         try:
             # Load raw HTK files
@@ -186,61 +164,35 @@ def transform(block_path, rate=400., cfs=None, sds=None,
         suffix_str = '_{}'.format(suffix)
     if phase:
         suffix_str = suffix_str + '_random_phase'
-    if neuro:
-        fname = '{}_neuro_Hilb{}.h5'.format(block_name, suffix_str)
-    else:
-        fname = '{}_Hilb{}.h5'.format(block_name, suffix_str)
+    fname = '{}_Hilb{}.h5'.format(block_name, suffix_str)
 
     hilb_path = os.path.join(block_path, fname)
     tmp_path = os.path.join(block_path, '{}_tmp.h5'.format(fname))
 
     with h5py.File(tmp_path, 'w') as f:
         note = 'applying Hilbert transform'
-        if neuro:
-            dset = f.create_dataset('X', (len(band_names),
-                                    X.shape[0], X.shape[1]),
-                                    np.complex)
-            kernels = []
-            for ii, (min_f, max_f) in enumerate(tqdm(zip(min_freqs, max_freqs),
-                                                     note,
-                                                     total=len(min_freqs))):
-                kernels.append(hamming(X, rate, min_f, max_f))
-            dset[ii] = hilbert_transform(X, rate, kernels)
+        dset = f.create_dataset('X', (len(cfs),
+                                X.shape[0], X.shape[1]),
+                                np.complex)
+        theta = None
+        if phase:
+            theta = rng.rand(*X.shape) * 2. * np.pi
+            theta = np.sin(theta) + 1j * np.cos(theta)
+        for ii, (cf, sd) in enumerate(tqdm(zip(cfs, sds),
+                                           note,
+                                           total=len(cfs))):
+            kernel = gaussian(X, rate, cf, sd)
+            dset[ii] = hilbert_transform(X, rate, kernel, phase=theta)
 
-            dset.dims[0].label = 'band'
-            dset.dims[1].label = 'channel'
-            dset.dims[2].label = 'time'
-            for val, name in ((min_freqs, 'min frequency'),
-                              (max_freqs, 'max frequency')):
-                if name not in f.keys():
-                    f[name] = val
-                dset.dims.create_scale(f[name], name)
-                dset.dims[0].attach_scale(f[name])
-
-        else:
-            dset = f.create_dataset('X', (len(cfs),
-                                    X.shape[0], X.shape[1]),
-                                    np.complex)
-            theta = None
-            if phase:
-                theta = rng.rand(*X.shape) * 2. * np.pi
-                theta = np.sin(theta) + 1j * np.cos(theta)
-            for ii, (cf, sd) in enumerate(tqdm(zip(cfs, sds),
-                                               note,
-                                               total=len(cfs))):
-                kernel = gaussian(X, rate, cf, sd)
-                Xp = hilbert_transform(X, rate, kernel, phase=theta)
-                dset[ii] = Xp
-
-            dset.dims[0].label = 'filter'
-            dset.dims[1].label = 'channel'
-            dset.dims[2].label = 'time'
-            for val, name in ((cfs, 'filter_center'),
-                              (sds, 'filter_sigma')):
-                if name not in f.keys():
-                    f[name] = val
-                dset.dims.create_scale(f[name], name)
-                dset.dims[0].attach_scale(f[name])
+        dset.dims[0].label = 'filter'
+        dset.dims[1].label = 'channel'
+        dset.dims[2].label = 'time'
+        for val, name in ((cfs, 'filter_center'),
+                          (sds, 'filter_sigma')):
+            if name not in f.keys():
+                f[name] = val
+            dset.dims.create_scale(f[name], name)
+            dset.dims[0].attach_scale(f[name])
 
         f.attrs['sampling_rate'] = rate
     os.rename(tmp_path, hilb_path)
