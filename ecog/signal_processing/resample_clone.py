@@ -35,13 +35,8 @@ import numpy as np
 from scipy.fftpack import ifftshift, fftfreq
 from scipy.signal import get_window
 from scipy._lib.six import callable
-try:
-    from accelerate.mkl.fftpack import fft, ifft
-except ImportError:
-    try:
-        from pyfftw.interfaces.numpy_fft import fft, ifft
-    except ImportError:
-        from numpy.fft import fft, ifft
+
+from .fft import fft, ifft
 
 
 def resample(x, num, t=None, axis=0, window=None):

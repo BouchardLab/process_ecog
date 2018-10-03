@@ -1,7 +1,7 @@
 from __future__ import division
 import numpy as np
-from numpy.fft import fftfreq
 
+from .fft import fftfreq, fft, ifft
 try:
     from accelerate.mkl.fftpack import fft, ifft
 except ImportError:
