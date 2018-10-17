@@ -16,7 +16,7 @@ scale = 7.
 cfs = 2 ** (np.arange(np.log2(fq_min) * scale, np.log2(fq_max) * scale) / scale)
 cfs = np.array(cfs)
 sds = 10 ** ( np.log10(.39) + .5 * (np.log10(cfs)))
-sds = np.array(sds)
+sds = np.array(sds) * np.sqrt(2.)
 chang_lab = {'fq_min': fq_min,
              'fq_max': fq_max,
              'scale': scale,

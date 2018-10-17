@@ -107,7 +107,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
 
     if fband is None:
         fname = os.path.join(output_folder, 'hdf5',
-                             ('{}_{}_{}_{}_{}_{}{}.h5'.format(subject,
+                             ('{}_{}{}_{}_{}_{}{}.h5'.format(subject,
                                                             block_str(blocks),
                                                             task,
                                                             data_type,
@@ -133,10 +133,10 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         pool = multiprocessing.Pool(len(blocks))
         print('Processing blocks in parallel ' +
               'with {} processes...'.format(pool._processes))
-        results = pool.map(process_block, args)
+        results = list(pool.map(process_block, args))
     else:
         print('Processing blocks serially ...')
-        results = map(process_block, args)
+        results = list(map(process_block, args))
 
     band_ids = results[0][0]
     block_fs = results[0][4]
@@ -256,10 +256,10 @@ def process_block(args):
                                          fband, phase)
     band_ids, data, fs, bl = rval
 
-    for k, v in data.iteritems():
+    for k, v in data.items():
         assert v.shape[0] == event_labels.shape[0], ('shapes', k, v.shape,
                                                      event_labels.shape)
-    bn = np.full(data.values()[0].shape[0], block, dtype=int)
+    bn = np.full(list(data.values())[0].shape[0], block, dtype=int)
 
     return band_ids, data, event_labels, bn, fs, bl
 
@@ -290,13 +290,13 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs,
     block_fs = np.array([block_fs[b] for b in band_ids], dtype=float)
     with h5py.File(fname_tmp, 'w') as f:
         if data_type in ['AA_avg', 'AA_ff']:
-            for b, d in data.iteritems():
+            for b, d in data.items():
                 dset = f.create_dataset('X{}'.format(b), data=d)
                 dset.dims[0].label = 'batch'
                 dset.dims[1].label = 'electrode'
                 dset.dims[2].label = 'time'
-            for n, block_bls in baselines.iteritems():
-                for b, bl in block_bls.iteritems():
+            for n, block_bls in baselines.items():
+                for b, bl in block_bls.items():
                     dset = f.create_dataset('bl_block_{}_band_{}'.format(n, b),
                                             data=bl)
             if data_type == 'AA_avg':
@@ -316,11 +316,11 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs,
 
         f.create_dataset('y', data=labels)
         f.create_dataset('block', data=block_numbers)
-        f.create_dataset('tokens', data=tokens)
+        f.create_dataset('tokens', data=[t.encode('utf8') for t in tokens])
         f.create_dataset('bands', data=np.array(band_ids))
         f.create_dataset('sampling_freqs', data=np.array(block_fs))
         grp = f.create_group('anatomy')
-        for key, value in anat.iteritems():
+        for key, value in anat.items():
             grp.create_dataset(key, data=value)
 
     os.rename(fname_tmp, fname)

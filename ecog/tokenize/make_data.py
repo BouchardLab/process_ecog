@@ -294,7 +294,7 @@ def load_AA_band(block_path, fbands, target_fs=None, phase=False):
     if phase:
         phase_str = '_random_phase'
     ecog_hilb_path = os.path.join(block_path,
-                                  '{}_Hilb{}.h5'.format(block, phase_str))
+                                  '{}_AA{}.h5'.format(block, phase_str))
     for fband in fbands:
         """
         if fband < 29 or fband > 36:
@@ -327,7 +327,7 @@ def load_AA_band(block_path, fbands, target_fs=None, phase=False):
                 fs = np.asscalar(f['sampling_rate'].value)
         """
         with h5py.File(ecog_hilb_path) as f:
-            X = abs(f['X'][fband])
+            X = f['X'][fband]
             fs = f.attrs['sampling_rate']
 
         if target_fs is not None:

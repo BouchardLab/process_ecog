@@ -4,11 +4,6 @@ import argparse, h5py, time, os
 import numpy as np
 from scipy.io import loadmat
 
-try:
-    from tqdm import tqdm
-except:
-    def tqdm(x, *args, **kwargs):
-        return x
 
 from ecog.signal_processing import resample
 from ecog.signal_processing import subtract_CAR
@@ -50,7 +45,7 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
     3) Hilbert transform on different bands
     ...
 
-    Saves to os.path.join(block_path, subject + '_B' + block + '_Hilb.h5')
+    Saves to os.path.join(block_path, subject + '_B' + block + '_AA.h5')
 
     Parameters
     ----------
@@ -62,11 +57,13 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
     takes about 20 minutes to run on 1 10-min block
     """
 
-    rng = np.random.RandomState(seed)
+    rng = None
+    if phase:
+        rng = np.random.RandomState(seed)
     rate = 400.
 
     cfs = bands.chang_lab['cfs']
-    sds = bands.chang_lab['cfs']
+    sds = bands.chang_lab['sds']
 
     subj_path, block_name = os.path.split(block_path)
 
@@ -128,15 +125,16 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
             print('Downsample time for {}: {}, {}, {}'.format(block_name,
                                                               time.time() - start1,
                                                               rate, fs))
-        if np.allclose(rate, 400.):
-            start = time.time()
-            with h5py.File(h5_ecog_tmp_path, 'w') as f:
-                g = f.create_group('ecogDS')
-                g.create_dataset('data', data=X)
-                g.create_dataset('sampFreq', data=rate)
-            os.rename(h5_ecog_tmp_path, h5_ecog_path)
-            print('Save time for {}400: {} seconds'.format(block_name,
-                                                           time.time()-start))
+        if not phase:
+            if np.allclose(rate, 400.):
+                start = time.time()
+                with h5py.File(h5_ecog_tmp_path, 'w') as f:
+                    g = f.create_group('ecogDS')
+                    g.create_dataset('data', data=X)
+                    g.create_dataset('sampFreq', data=rate)
+                os.rename(h5_ecog_tmp_path, h5_ecog_path)
+                print('Save time for {}400: {} seconds'.format(block_name,
+                                                               time.time()-start))
 
     if X.shape[0] != total_channels:
         raise ValueError(block_name, X.shape, total_channels)
@@ -164,25 +162,26 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
         suffix_str = '_{}'.format(suffix)
     if phase:
         suffix_str = suffix_str + '_random_phase'
-    fname = '{}_Hilb{}.h5'.format(block_name, suffix_str)
+    fname = '{}_AA{}.h5'.format(block_name, suffix_str)
 
-    hilb_path = os.path.join(block_path, fname)
+    AA_path = os.path.join(block_path, fname)
     tmp_path = os.path.join(block_path, '{}_tmp.h5'.format(fname))
+    X = X.astype(float)
 
     with h5py.File(tmp_path, 'w') as f:
         note = 'applying Hilbert transform'
         dset = f.create_dataset('X', (len(cfs),
                                 X.shape[0], X.shape[1]),
-                                np.complex)
+                                dtype=float)
         theta = None
         if phase:
             theta = rng.rand(*X.shape) * 2. * np.pi
             theta = np.sin(theta) + 1j * np.cos(theta)
-        for ii, (cf, sd) in enumerate(tqdm(zip(cfs, sds),
-                                           note,
-                                           total=len(cfs))):
+        X_fft_h = None
+        for ii, (cf, sd) in enumerate(zip(cfs, sds)):
             kernel = gaussian(X, rate, cf, sd)
-            dset[ii] = hilbert_transform(X, rate, kernel, phase=theta)
+            Xp, X_fft_h = hilbert_transform(X, rate, kernel, phase=theta, X_fft_h=X_fft_h)
+            dset[ii] = abs(Xp).astype(float)
 
         dset.dims[0].label = 'filter'
         dset.dims[1].label = 'channel'
@@ -195,10 +194,10 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
             dset.dims[0].attach_scale(f[name])
 
         f.attrs['sampling_rate'] = rate
-    os.rename(tmp_path, hilb_path)
+    os.rename(tmp_path, AA_path)
 
     print('{} finished'.format(block_name))
-    print('saved: {}'.format(hilb_path))
+    print('saved: {}'.format(AA_path))
 
 
 if __name__ == '__main__':

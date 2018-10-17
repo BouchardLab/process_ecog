@@ -46,7 +46,7 @@ def hamming(X, rate, min_freq, max_freq):
     return k
 
 
-def hilbert_transform(X, rate, filters=None, phase=None):
+def hilbert_transform(X, rate, filters=None, phase=None, X_fft_h=None):
     """
     Apply bandpass filtering with Hilbert transform using
     a prespecified set of filters.
@@ -70,16 +70,16 @@ def hilbert_transform(X, rate, filters=None, phase=None):
     time = X.shape[-1]
     freq = fftfreq(time, 1. / rate)
 
-    # Heavyside filter
-    h = np.zeros(len(freq))
-    h[freq > 0] = 2.
-    h[0] = 1.
-    h = h[np.newaxis, :]
-
     Xh = np.zeros((len(filters),) + X.shape, dtype=np.complex)
-    X_fft_h = fft(X) * h
-    if phase is not None:
-        X_fft_h *= phase
+    if X_fft_h is None:
+        # Heavyside filter
+        h = np.zeros(len(freq))
+        h[freq > 0] = 2.
+        h[0] = 1.
+        h = h[np.newaxis, :]
+        X_fft_h = fft(X) * h
+        if phase is not None:
+            X_fft_h *= phase
     for ii, f in enumerate(filters):
         if f is None:
             Xh[ii] = ifft(X_fft_h)
@@ -87,6 +87,6 @@ def hilbert_transform(X, rate, filters=None, phase=None):
             f = f / f.sum()
             Xh[ii] = ifft(X_fft_h * f)
     if Xh.shape[0] == 1:
-        return Xh[0]
+        return Xh[0], X_fft_h
 
-    return Xh
+    return Xh, X_fft_h

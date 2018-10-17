@@ -22,13 +22,7 @@ setup(
     description='ECoG preprocessing scripts.',
     long_description=long_description,
     author='Jesse Livezey',
-    author_email='jesse.livezey@berkeley.edu',
-
-    install_requires = [
-      'h5py',
-      'numpy',
-      'scipy',
-      'pandas']
+    author_email='jesse.livezey@berkeley.edu'
     )
 """
 # To provide executable scripts, use entry points in preference to the
