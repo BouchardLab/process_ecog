@@ -92,7 +92,7 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
             fs = HTKoutR['sampling_rate'] / srf
             print('Load time for htk {}: {} seconds'.format(block_name, time.time() - start))
 
-        except OSError:
+        except IOError:
             try:
                 # HDF5 .mat format
                 with h5py.File(mat_ecog_path, 'r') as f:
@@ -101,18 +101,33 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
                     print('Load time for h5.mat {}:' +
                           ' {} seconds'.format(block_name, time.time() - start))
             except IOError:
-                # Old .mat format
-                X = None
-                fs = None
-                data = loadmat(mat_ecog_path)['ecogDS']
-                for ii, dtn in enumerate(data.dtype.names):
-                    if dtn == 'data':
-                        X = data.item()[ii]
-                    elif dtn == 'sampFreq':
-                        fs = data.item()[ii][0]
-                assert X is not None
-                assert fs is not None
-                print('Load time for mat {}: {} seconds'.format(block_name, time.time() - start))
+                try:
+                    # Old .mat format
+                    X = None
+                    fs = None
+                    data = loadmat(mat_ecog_path)['ecogDS']
+                    for ii, dtn in enumerate(data.dtype.names):
+                        if dtn == 'data':
+                            X = data.item()[ii]
+                        elif dtn == 'sampFreq':
+                            fs = data.item()[ii][0]
+                    assert X is not None
+                    assert fs is not None
+                    print('Load time for mat {}: {} seconds'.format(block_name, time.time() - start))
+                except IOError:
+                    # New Ben h5.mat
+                    new_mat = os.path.join(block_path, '{}_raw.mat'.format(block_name))
+                    with h5py.File(new_mat, 'r') as f:
+                        data = []
+                        fs = None
+                        for ii in range(1, 5):
+                            if fs is None:
+                                fs = f['data/streams/Wav{}/fs'.format(ii)][0][0]
+                            else:
+                                assert fs == f['data/streams/Wav{}/fs'.format(ii)][0][0]
+                            data.append(f['data/streams/Wav{}/data'.format(ii)].value.T)
+                    data = np.concatenate(data)
+
 
         try:
             os.mkdir(os.path.join(block_path, 'ecog400'))
