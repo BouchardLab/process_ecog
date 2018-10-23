@@ -118,15 +118,15 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
                     # New Ben h5.mat
                     new_mat = os.path.join(block_path, '{}_raw.mat'.format(block_name))
                     with h5py.File(new_mat, 'r') as f:
-                        data = []
+                        X = []
                         fs = None
                         for ii in range(1, 5):
                             if fs is None:
                                 fs = f['data/streams/Wav{}/fs'.format(ii)][0][0]
                             else:
                                 assert fs == f['data/streams/Wav{}/fs'.format(ii)][0][0]
-                            data.append(f['data/streams/Wav{}/data'.format(ii)].value.T)
-                    data = np.concatenate(data)
+                            X.append(f['data/streams/Wav{}/data'.format(ii)].value.T)
+                    X = np.concatenate(X) * 1e6 # Values are too small otherwise
 
 
         try:

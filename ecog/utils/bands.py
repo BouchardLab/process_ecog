@@ -26,7 +26,7 @@ chang_lab = {'fq_min': fq_min,
 
 # Standard neuro bands
 bands = ['theta', 'alpha', 'beta', 'high beta', 'gamma', 'high gamma']
-min_freqs = [4., 9., 15., 21., 30., 75.]
+min_freqs = [4., 9., 15., 21., 30., 70.]
 max_freqs = [8., 14., 20., 29., 59., 150.]
 HG_freq = 200.
 neuro = {'bands': bands,
