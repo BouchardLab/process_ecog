@@ -110,7 +110,7 @@ def tokenize(subject_path, blocks, task='CV',
         phase_str = '_random_phase'
 
     if fband is None:
-        fname = os.path.join(output_folder, 'hdf5',
+        fname = os.path.join(output_folder,
                              ('{}_{}{}_{}_{}_{}{}.h5'.format(subject,
                                                             block_str(blocks),
                                                             task,
@@ -119,7 +119,7 @@ def tokenize(subject_path, blocks, task='CV',
                                                             zscore,
                                                             phase_str)))
     else:
-        fname = os.path.join(output_folder, 'hdf5',
+        fname = os.path.join(output_folder,
                              (subject + '_' + block_str(blocks) +
                               task + '_' + data_type + '_' +
                               str(fband) + '_' +
@@ -200,7 +200,7 @@ def tokenize(subject_path, blocks, task='CV',
     test_label = labels[band_ids[0]]
     test_block = block_numbers[band_ids[0]]
     for b in band_ids[1:]:
-        assert np.allclose(test_label, labels[b])
+        assert np.all([ti == li for ti, li in zip(test_label, labels[b])])
         assert np.allclose(test_block, block_numbers[b])
     labels = test_label
     block_numbers = test_block
@@ -235,11 +235,14 @@ def process_block(args):
     idx = np.argsort(event_times)
     event_times = event_times[idx]
     event_labels = event_labels[idx]
+    event_labels = np.array([tokens.index(li) for li in event_labels],
+                            dtype=int)
 
     rval = make_data.run_extract_windows(block_path, event_times,
                                          align_window, data_type,
                                          zscore, fband, phase)
     band_ids, data, fs, bl = rval
+    print(band_ids)
 
     for k, v in data.items():
         assert v.shape[0] == event_labels.shape[0], ('shapes', k, v.shape,
@@ -274,7 +277,7 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs,
     band_ids = sorted(data.keys())
     block_fs = np.array([block_fs[b] for b in band_ids], dtype=float)
     with h5py.File(fname_tmp, 'w') as f:
-        if data_type in ['AA_avg', 'AA_ff']:
+        if data_type in ['AA_avg', 'AA_ff', 'AA']:
             for b, d in data.items():
                 dset = f.create_dataset('X{}'.format(b), data=d)
                 dset.dims[0].label = 'batch'
@@ -289,24 +292,14 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs,
                 max_freqs = bands.neuro['max_freqs']
                 f.create_dataset('min_freqs', data=np.array(min_freqs))
                 f.create_dataset('max_freqs', data=np.array(max_freqs))
-        elif data_type == 'HG':
-            b = band_ids[0]
-            d = data[b]
-            dset = f.create_dataset('X{}'.format(b), data=d)
-            dset.dims[0].label = 'batch'
-            dset.dims[1].label = 'electrode'
-            dset.dims[2].label = 'time'
         else:
             raise ValueError
 
         f.create_dataset('y', data=labels)
         f.create_dataset('block', data=block_numbers)
         f.create_dataset('tokens', data=[t.encode('utf8') for t in tokens])
-        f.create_dataset('bands', data=np.array(band_ids))
         f.create_dataset('sampling_freqs', data=np.array(block_fs))
-        grp = f.create_group('anatomy')
-        for key, value in anat.items():
-            grp.create_dataset(key, data=value)
+        f.create_dataset('anatomy', data=[t.encode('utf8') for t in anat])
 
     os.rename(fname_tmp, fname)
 

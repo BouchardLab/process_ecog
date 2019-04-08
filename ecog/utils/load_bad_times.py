@@ -15,12 +15,11 @@ def load_bad_times(nwb):
 
     Returns
     -------
-    bad_times : ndarray
+    bad_times : ndarray, (n_windows, 2)
         Pairs of start and stop times for bad segments.
     """
     start = nwb.invalid_times['start_time'].data[:]
     stop = nwb.invalid_times['stop_time'].data[:]
 
-    bad_times = np.stack([start, stop])
-    print(bad_times, bad_times.shape)
+    bad_times = np.stack([start, stop], axis=1)
     return bad_times
