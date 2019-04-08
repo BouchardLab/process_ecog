@@ -4,35 +4,40 @@ import argparse, h5py, multiprocessing, os
 import numpy as np
 
 from ecog.tokenize import transcripts, make_data
-from ecog.utils import bands
+from ecog.utils import bands, load_anatomy
+
+import nwbext_ecog
+from pynwb import NWBHDF5IO
+
 
 __author__ = 'David Conant, Jesse Livezey'
 
 
 def main():
     parser = argparse.ArgumentParser(description='Tokenize ECoG Data')
-    parser.add_argument('path', help='path to subject folder')
+    parser.add_argument('path', help='path to root folder')
+    parser.add_argument('subject', type=str, help="Subject code")
     parser.add_argument('blocks', nargs='+', type=str)
-    parser.add_argument('-o', '--output_folder', default=None)
     parser.add_argument('-t', '--task', default='CV')
     parser.add_argument('-w', '--align_window', nargs=2, type=float,
                         default=[-.5, .79])
     parser.add_argument('-p', '--align_pos', type=int, default=1)
-    parser.add_argument('-d', '--data_type', default='HG')
-    parser.add_argument('-b', '--zscore', default='between_data')
+    parser.add_argument('-d', '--data_type', default='AA_avg')
+    parser.add_argument('-b', '--zscore', default='silence')
     parser.add_argument('-m', '--mp', action='store_true', default=False)
     parser.add_argument('-e', '--phase', action='store_true', default=False)
     parser.add_argument('-f', '--fband', type=int, default=None)
     args = parser.parse_args()
-    htk_to_hdf5(args.path, args.blocks, args.output_folder, args.task,
-                args.align_window, args.align_pos, args.data_type, args.zscore,
-                args.fband, args.mp, args.phase)
+    subject_path = os.path.join(args.path, args.subject)
+    tokenize(subject_path, args.blocks, args.task,
+             args.align_window, args.align_pos, args.data_type, args.zscore,
+             args.fband, args.mp, args.phase)
 
 
-def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
-                align_window=None, align_pos=0,
-                data_type='HG', zscore='events',
-                fband=None, mp=True, phase=False):
+def tokenize(subject_path, blocks, task='CV',
+             align_window=None, align_pos=1,
+             data_type='AA_avg', zscore='silence',
+             fband=None, mp=True, phase=False):
     """
     Process task data into segments with labels.
 
@@ -46,7 +51,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         Type of tokens to be extracted.
     align_window : list of two ints
         Time window in seconds around each token.
-    align_pos : ints
+    align_pos : int
         Align to start of this phoneme.
     data_type : str
         Type of data to use.
@@ -59,8 +64,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         Anatomy of data channels
     """
 
-    if output_folder is None:
-        output_folder = path
+    output_folder = subject_path
 
     tasks = ['CV']
     if task == 'CV':
@@ -99,7 +103,7 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
         rval = 'align_window_{}_to_{}'.format(align_window[0], align_window[1])
         return rval
 
-    folder, subject = os.path.split(os.path.normpath(path))
+    folder, subject = os.path.split(os.path.normpath(subject_path))
 
     phase_str = ''
     if phase:
@@ -122,10 +126,20 @@ def htk_to_hdf5(path, blocks, output_folder=None, task='CV',
                               align_window_str(align_window) + '_' +
                               zscore + '.h5'))
 
-    anat = make_data.load_anatomy(path)
-
     blocks = [int(block) for block in blocks]
-    args = [(subject, block, path, tokens, align_pos,
+
+    block_path = os.path.join(subject_path, '{}_B{}.nwb'.format(subject, blocks[0]))
+    with NWBHDF5IO(block_path, 'r') as io:
+        nwb = io.read()
+        anat = load_anatomy(nwb)
+    for bi in blocks[1:]:
+        with NWBHDF5IO(block_path, 'r') as io:
+            nwb = io.read()
+            anat_b = load_anatomy(nwb)
+        if not np.all(np.equal(anat_b, anat)):
+            raise ValueError('Block {} has different anatomy.'.format(bi))
+
+    args = [(subject, block, folder, tokens, align_pos,
              align_window, data_type, zscore, fband, phase) for block in blocks]
     print('Numbers of blocks to be processed: {}'.format(len(blocks)))
 
@@ -210,50 +224,21 @@ def process_block(args):
     (subject, block, path, tokens, align_pos, align_window,
      data_type, zscore, fband, phase) = args
 
-    blockname = '{}_B{}'.format(subject, block)
+    blockname = '{}_B{}.nwb'.format(subject, block)
     print('Processing subject {}'.format(subject))
     print('-----------------------')
-    blockpath = os.path.join(path, blockname)
-
-    # Convert parseout to dataframe
-    parseout = transcripts.parse(blockpath, blockname)
-    df = transcripts.make_df(parseout, block, subject, align_pos)
-
-    all_event_times = None
-    for token in tokens:
-        match = (df['label'] == token)
-        temp_event_times = df['align'][match & (df['mode'] == 'speak')]
-        if all_event_times is None:
-            all_event_times = temp_event_times
-        else:
-            all_event_times = np.hstack((all_event_times,
-                                         temp_event_times))
-
-    event_times = None
-    event_labels = None
-    for ii, token in enumerate(sorted(tokens)):
-        match = (df['label'] == token)
-
-        temp_times = df['align'][match & (df['mode'] == 'speak')]
-        if event_times is None:
-            event_times = temp_times
-        else:
-            event_times = np.hstack([event_times, temp_times])
-
-        temp_labels = np.full(temp_times.shape[0], ii, dtype=int)
-        if event_labels is None:
-            event_labels = temp_labels
-        else:
-            event_labels = np.concatenate((event_labels, temp_labels))
+    block_path = os.path.join(path, subject, blockname)
+    with NWBHDF5IO(block_path, 'r') as io:
+        nwb = io.read()
+        event_times, event_labels = transcripts.get_speak_event(nwb, align_pos)
 
     idx = np.argsort(event_times)
     event_times = event_times[idx]
     event_labels = event_labels[idx]
 
-    rval = make_data.run_extract_windows(blockpath, event_times,
+    rval = make_data.run_extract_windows(block_path, event_times,
                                          align_window, data_type,
-                                         zscore, all_event_times,
-                                         fband, phase)
+                                         zscore, fband, phase)
     band_ids, data, fs, bl = rval
 
     for k, v in data.items():

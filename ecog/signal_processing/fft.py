@@ -6,9 +6,6 @@ try:
     from mkl_fft._numpy_fft import rfft, irfft, fft, ifft
 except ImportError:
     try:
-        from accelerate.mkl.fftpack import rfft, irfft, fft, ifft
+        from pyfftw.interfaces.numpy_fft import rfft, irfft, fft, ifft
     except ImportError:
-        try:
-            from pyfftw.interfaces.numpy_fft import rfft, irfft, fft, ifft
-        except ImportError:
-            from numpy.fft import rfft, irfft, fft, ifft
+        from numpy.fft import rfft, irfft, fft, ifft
