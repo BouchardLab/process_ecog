@@ -10,12 +10,10 @@ from ecog.signal_processing import subtract_CAR
 from ecog.signal_processing import linenoise_notch
 from ecog.signal_processing import hilbert_transform
 from ecog.signal_processing import gaussian
-from ecog.utils import HTK, load_bad_electrodes, bands
+from ecog.utils import load_bad_electrodes, bands
 
-srf = HTK.SAMPLING_RATE_FACTOR
-
-
-__authors__ = "Alex Bujan (adapted from Kris Bouchard)"
+import nwbext_ecog
+from pynwb import NWBHDF5IO
 
 
 def main():
@@ -32,7 +30,7 @@ def main():
 
     for block in args.blocks:
         block_path = os.path.join(args.path, args.subject,
-                                  '{}_B{}'.format(args.subject, block))
+                                  '{}_B{}.nwb'.format(args.subject, block))
         transform(block_path, phase=args.phase)
 
 
@@ -66,96 +64,26 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
     sds = bands.chang_lab['sds']
 
     subj_path, block_name = os.path.split(block_path)
+    block_name = os.path.splitext(block_path)[0]
 
     start = time.time()
-    h5_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.h5')
-    h5_ecog_tmp_path = os.path.join(block_path, 'ecog400', 'ecog_tmp.h5')
-    mat_ecog_path = os.path.join(block_path, 'ecog400', 'ecog.mat')
-    try:
-        raise IOError
-        # HDF5 format
-        with h5py.File(h5_ecog_path, 'r') as f:
-            X = f['ecogDS']['data'].value
-            fs = f['ecogDS']['sampFreq'].value
-        print('Load time for h5 {}: {} seconds'.format(block_name,
-                                                       time.time() - start))
-        print('rates {}: {} {}'.format(block_name, rate, fs))
-        if not np.allclose(rate, fs):
-            assert rate < fs
-            X = resample(X, rate, fs)
-    except IOError:
-        try:
-            # Load raw HTK files
-            rd_path = os.path.join(block_path, 'RawHTK')
-            HTKoutR = HTK.read_HTKs(rd_path)
-            X = HTKoutR['data'] * 1e6
-            fs = HTKoutR['sampling_rate'] / srf
-            print('Load time for htk {}: {} seconds'.format(block_name, time.time() - start))
 
-        except IOError:
-            try:
-                # HDF5 .mat format
-                with h5py.File(mat_ecog_path, 'r') as f:
-                    X = f['ecogDS']['data'][:].T
-                    fs = f['ecogDS']['sampFreq'][0]
-                    print('Load time for h5.mat {}:' +
-                          ' {} seconds'.format(block_name, time.time() - start))
-            except IOError:
-                try:
-                    # Old .mat format
-                    X = None
-                    fs = None
-                    data = loadmat(mat_ecog_path)['ecogDS']
-                    for ii, dtn in enumerate(data.dtype.names):
-                        if dtn == 'data':
-                            X = data.item()[ii]
-                        elif dtn == 'sampFreq':
-                            fs = data.item()[ii][0]
-                    assert X is not None
-                    assert fs is not None
-                    print('Load time for mat {}: {} seconds'.format(block_name, time.time() - start))
-                except IOError:
-                    # New Ben h5.mat
-                    new_mat = os.path.join(block_path, '{}_raw.mat'.format(block_name))
-                    with h5py.File(new_mat, 'r') as f:
-                        X = []
-                        fs = None
-                        for ii in range(1, 5):
-                            if fs is None:
-                                fs = f['data/streams/Wav{}/fs'.format(ii)][0][0]
-                            else:
-                                assert fs == f['data/streams/Wav{}/fs'.format(ii)][0][0]
-                            X.append(f['data/streams/Wav{}/data'.format(ii)].value.T)
-                    X = np.concatenate(X) * 1e6 # Values are too small otherwise
-
-
-        try:
-            os.mkdir(os.path.join(block_path, 'ecog400'))
-        except OSError:
-            pass
-        if not np.allclose(rate, fs):
-            assert rate < fs
-            start1 = time.time()
-            X = resample(X, rate, fs)
-            print('Downsample time for {}: {}, {}, {}'.format(block_name,
-                                                              time.time() - start1,
-                                                              rate, fs))
-        if not phase:
-            if np.allclose(rate, 400.):
-                start = time.time()
-                with h5py.File(h5_ecog_tmp_path, 'w') as f:
-                    g = f.create_group('ecogDS')
-                    g.create_dataset('data', data=X)
-                    g.create_dataset('sampFreq', data=rate)
-                os.rename(h5_ecog_tmp_path, h5_ecog_path)
-                print('Save time for {}400: {} seconds'.format(block_name,
-                                                               time.time()-start))
+    with NWBHDF5IO(block_path, 'r') as io:
+        nwb = io.read()
+        X = nwb.acquisition['ECoG'].data[:].T
+        fs = nwb.acquisition['ECoG'].rate
+        bad_elects = load_bad_electrodes(nwb)
+    print('Load time for h5 {}: {} seconds'.format(block_name,
+                                                   time.time() - start))
+    print('rates {}: {} {}'.format(block_name, rate, fs))
+    if not np.allclose(rate, fs):
+        assert rate < fs
+        X = resample(X, rate, fs)
 
     if X.shape[0] != total_channels:
         raise ValueError(block_name, X.shape, total_channels)
 
-    bad_elects = load_bad_electrodes(block_path)
-    if len(bad_elects) > 0:
+    if bad_elects.sum() > 0:
         X[bad_elects] = np.nan
 
     # Subtract CAR
@@ -181,13 +109,13 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
 
     AA_path = os.path.join(block_path, fname)
     tmp_path = os.path.join(block_path, '{}_tmp.h5'.format(fname))
-    X = X.astype(float)
+    X = X.astype('float32')
 
     with h5py.File(tmp_path, 'w') as f:
         note = 'applying Hilbert transform'
         dset = f.create_dataset('X', (len(cfs),
                                 X.shape[0], X.shape[1]),
-                                dtype=float)
+                                dtype='float32')
         theta = None
         if phase:
             theta = rng.rand(*X.shape) * 2. * np.pi
@@ -196,7 +124,7 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
         for ii, (cf, sd) in enumerate(zip(cfs, sds)):
             kernel = gaussian(X, rate, cf, sd)
             Xp, X_fft_h = hilbert_transform(X, rate, kernel, phase=theta, X_fft_h=X_fft_h)
-            dset[ii] = abs(Xp).astype(float)
+            dset[ii] = abs(Xp).astype('float32')
 
         dset.dims[0].label = 'filter'
         dset.dims[1].label = 'channel'

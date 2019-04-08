@@ -3,10 +3,10 @@ import numpy as np
 from numpy.fft import rfftfreq, fftfreq
 
 try:
-    from accelerate.mkl.fftpack import rfft, irfft, fft, ifft
+    from mkl_fft._numpy_fft import rfft, irfft, fft, ifft
 except ImportError:
     try:
-        from mkl_fft._numpy_fft import rfft, irfft, fft, ifft
+        from accelerate.mkl.fftpack import rfft, irfft, fft, ifft
     except ImportError:
         try:
             from pyfftw.interfaces.numpy_fft import rfft, irfft, fft, ifft

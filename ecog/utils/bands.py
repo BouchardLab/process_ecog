@@ -3,12 +3,6 @@ Frequency band information for different types of data processing.
 """
 import numpy as np
 
-class DataFormat(object):
-    def write_preprocessed(self):
-        raise NotImplementedError
-    def read_preprocessed(self):
-        raise NotImplementedError
-
 # Chang lab frequencies
 fq_min = 4.0749286538265
 fq_max = 200.
@@ -21,8 +15,7 @@ chang_lab = {'fq_min': fq_min,
              'fq_max': fq_max,
              'scale': scale,
              'cfs': cfs,
-             'sds': sds,
-             'block_path': '{}_Hilb.h5'}
+             'sds': sds}
 
 # Standard neuro bands
 bands = ['theta', 'alpha', 'beta', 'gamma', 'high gamma']
@@ -32,5 +25,4 @@ HG_freq = 200.
 neuro = {'bands': bands,
          'min_freqs': min_freqs,
          'max_freqs': max_freqs,
-         'HG_freq': HG_freq,
-         'block_path': '{}_neuro_Hilb.h5'}
+         'HG_freq': HG_freq}

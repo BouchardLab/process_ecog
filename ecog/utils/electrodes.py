@@ -72,14 +72,14 @@ def load_electrode_labels(subj_dir):
     return electrode_labels
 
 
-def load_bad_electrodes(blockpath):
+def load_bad_electrodes(nwb):
     """
     Load bad electrodes.
 
     Parameters
     ----------
-    blockpath : str
-        Path to block to load bad electrodes from.
+    nwb : NWBFile
+        Open NWB file for the block.
 
     Returns
     -------
@@ -87,13 +87,6 @@ def load_bad_electrodes(blockpath):
         Python (0-based) indices of bad electrodes.
     """
 
-    bad_electrodes = []
-    with open(os.path.join(blockpath, 'Artifacts', 'badChannels.txt'),'rt') as f:
-        lines = f.readlines()
-        lines = ' '.join(lines)
-        els = lines.split(' ')
-        els = [int(el) for el in els if el != '']
-
-    bad_electrodes = np.array([el-1 for el in els], dtype=int)
+    bad_electrodes = nwb.ec_electrodes['bad'].data[:]
 
     return bad_electrodes
