@@ -42,5 +42,7 @@ def standardize_token(token):
     token = token.replace('gh', 'g')
     token = token.replace('who', 'hoo')
     token = token.replace('aw', 'aa')
+    if len(token) == 2:
+        token = token.replace('ha', 'haa')
 
     return token
