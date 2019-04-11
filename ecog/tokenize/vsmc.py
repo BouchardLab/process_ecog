@@ -16,9 +16,7 @@ def restrict_to_good_vsmc(file_name, remove_per_sample_baseline=False):
             band_X[b] = f['X{}'.format(b)][:]
         y = f['y'][:]
         tokens = f['tokens'][:]
-        anatomy = dict()
-        for key in f['anatomy'].keys():
-            anatomy[key] = f['anatomy'][key].value-1
+        anatomy = f['anatomy'][:]
         sampling_freqs = f['sampling_freqs'].value
 
     # Select vSMC
