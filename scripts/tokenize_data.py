@@ -4,6 +4,7 @@ import argparse, h5py, multiprocessing, os
 import numpy as np
 
 from ecog.tokenize import transcripts, make_data
+from ecog.tokenize.vsmc import restrict_to_good_vsmc
 from ecog.utils import bands, load_anatomy
 
 import nwbext_ecog
@@ -302,6 +303,8 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs,
         f.create_dataset('anatomy', data=[t.encode('utf8') for t in anat])
 
     os.rename(fname_tmp, fname)
+
+    restrict_to_good_vsmc(fname)
 
 
 if __name__ == "__main__":
