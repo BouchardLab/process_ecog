@@ -70,7 +70,8 @@ def transform(block_path, suffix=None, phase=False, total_channels=256,
 
     with NWBHDF5IO(block_path, 'r') as io:
         nwb = io.read()
-        X = nwb.acquisition['ECoG'].data[:].T
+        # 1e6 scaling helps with numerical accuracy
+        X = nwb.acquisition['ECoG'].data[:].T * 1e6
         fs = nwb.acquisition['ECoG'].rate
         bad_elects = load_bad_electrodes(nwb)
     print('Load time for h5 {}: {} seconds'.format(block_name,

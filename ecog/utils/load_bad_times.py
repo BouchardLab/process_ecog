@@ -19,10 +19,9 @@ def load_bad_times(nwb):
         Pairs of start and stop times for bad segments.
     """
     times = nwb.invalid_times
+    bad_times = None
     if times is not None:
         start = nwb.invalid_times['start_time'].data[:]
         stop = nwb.invalid_times['stop_time'].data[:]
         bad_times = np.stack([start, stop], axis=1)
-    else:
-        bad_times = np.array([])
     return bad_times

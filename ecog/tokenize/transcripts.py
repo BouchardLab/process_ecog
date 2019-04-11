@@ -1,11 +1,4 @@
-from __future__ import division
-
-__author__ = 'David Conant, Jesse Livezey'
-
-import re, os
 import numpy as np
-import pandas as pd
-
 
 def get_speak_event(nwb, align_pos):
     transcript = nwb.trials.to_dataframe()

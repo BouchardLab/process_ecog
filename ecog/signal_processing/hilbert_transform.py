@@ -22,7 +22,7 @@ def gaussian(X, rate, center, sd):
     freq = fftfreq(time, 1./rate)
 
     k = np.exp((-(np.abs(freq) - center)**2)/(2 * (sd**2)))
-    k /= k.sum()
+    k /= np.linalg.norm(k)
 
     return k
 
@@ -41,7 +41,7 @@ def hamming(X, rate, min_freq, max_freq):
     window_size = np.count_nonzero(neg_in_window)
     window = np.hamming(window_size)
     k[neg_in_window] = window
-    k /= k.sum()
+    k /= np.linalg.norm(k)
 
     return k
 
@@ -84,7 +84,7 @@ def hilbert_transform(X, rate, filters=None, phase=None, X_fft_h=None):
         if f is None:
             Xh[ii] = ifft(X_fft_h)
         else:
-            f = f / f.sum()
+            f = f / np.linalg.norm(f)
             Xh[ii] = ifft(X_fft_h * f)
     if Xh.shape[0] == 1:
         return Xh[0], X_fft_h
