@@ -143,6 +143,7 @@ def tokenize(subject_path, blocks, task='CV',
     args = [(subject, block, folder, tokens, align_pos,
              align_window, data_type, zscore, fband, phase) for block in blocks]
     print('Numbers of blocks to be processed: {}'.format(len(blocks)))
+    print('Blocks: {}'.format(' '.join(blocks)))
 
     if mp and len(blocks) > 1:
         pool = multiprocessing.Pool(len(blocks))
@@ -304,7 +305,8 @@ def save_hdf5(fname, data, labels, tokens, block_numbers, block_fs,
 
     os.rename(fname_tmp, fname)
 
-    restrict_to_good_vsmc(fname)
+    if data_type == 'AA_avg':
+        restrict_to_good_vsmc(fname)
 
 
 if __name__ == "__main__":

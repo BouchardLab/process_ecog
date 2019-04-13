@@ -37,5 +37,7 @@ def standardize_token(token):
     token = token.replace('aw', 'aa')
     if len(token) == 2:
         token = token.replace('ha', 'haa')
+    elif len(token) == 3:
+        token = token.replace('she', 'shee')
 
     return token
