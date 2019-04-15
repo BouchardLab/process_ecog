@@ -143,7 +143,7 @@ def tokenize(subject_path, blocks, task='CV',
     args = [(subject, block, folder, tokens, align_pos,
              align_window, data_type, zscore, fband, phase) for block in blocks]
     print('Numbers of blocks to be processed: {}'.format(len(blocks)))
-    print('Blocks: {}'.format(' '.join(blocks)))
+    print('Blocks: {}'.format(block_str(blocks))))
 
     if mp and len(blocks) > 1:
         pool = multiprocessing.Pool(len(blocks))
