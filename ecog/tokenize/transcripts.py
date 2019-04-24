@@ -6,10 +6,14 @@ def get_speak_event(nwb, align_pos):
     if align_pos == 0:
         event_times = transcript['start_time']
     elif align_pos == 1:
-        event_times = transcript['start_time'] + transcript['cv_transition']
+        event_times = transcript['cv_transition']
     elif align_pos == 2:
         event_times = transcript['stop_time']
     else:
+        raise ValueError
+
+    # Make sure we don't have the old format
+    if event_times.max() < 10:
         raise ValueError
     event_labels = transcript['condition']
     event_labels = np.array([standardize_token(el) for el in event_labels])
