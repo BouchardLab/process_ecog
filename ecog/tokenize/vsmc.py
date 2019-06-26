@@ -20,8 +20,8 @@ def restrict_to_good_vsmc(file_name, remove_per_sample_baseline=False):
         sampling_freqs = f['sampling_freqs'].value
 
     # Select vSMC
-    precentral = np.array([ai == 'precentral' for ai in anatomy)
-    postcentral = np.array([ai == 'postcentral' for ai in anatomy)
+    precentral = np.array([ai == 'precentral' for ai in anatomy])
+    postcentral = np.array([ai == 'postcentral' for ai in anatomy])
     vsmc = np.logical_or(precentral, postcentral)
     vsmc = np.nonzero(vsmc)[0]
 
