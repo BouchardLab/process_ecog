@@ -12,7 +12,6 @@ from ecog.signal_processing import hilbert_transform
 from ecog.signal_processing import gaussian
 from ecog.utils import load_bad_electrodes, bands
 
-import nwbext_ecog
 from pynwb import NWBHDF5IO
 
 
