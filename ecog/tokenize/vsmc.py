@@ -96,7 +96,7 @@ def restrict_to_good_vsmc(file_name, remove_per_sample_baseline=False):
     tmp_path = '{}_tmp'.format(save_path)
     with h5py.File(tmp_path, 'w') as f:
         for b in neuro_bands:
-            f.create_dataset('X{}'.format(b), data=debaselined[b])
+            f.create_dataset('X{}'.format(b), data=save_data[b])
         f.create_dataset('y', data=y_ex_filtered)
 
     os.rename(tmp_path, save_path)
