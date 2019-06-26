@@ -6,7 +6,7 @@ def get_speak_event(nwb, align_pos):
     if align_pos == 0:
         event_times = transcript['start_time']
     elif align_pos == 1:
-        event_times = transcript['cv_transition']
+        event_times = transcript['cv_transition_time']
     elif align_pos == 2:
         event_times = transcript['stop_time']
     else:
