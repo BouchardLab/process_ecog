@@ -7,7 +7,6 @@ from ecog.tokenize import transcripts, make_data
 from ecog.tokenize.vsmc import restrict_to_good_vsmc
 from ecog.utils import bands, load_anatomy
 
-import nwbext_ecog
 from pynwb import NWBHDF5IO
 
 

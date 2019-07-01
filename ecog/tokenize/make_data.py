@@ -8,7 +8,6 @@ from ecog import utils
 from ..signal_processing import resample, zscore, load_silence_time
 from ..utils import (bands, load_bad_electrodes, load_bad_times)
 
-import nwbext_ecog
 from pynwb import NWBHDF5IO
 
 __author__ = 'David Conant, Jesse Livezey'
