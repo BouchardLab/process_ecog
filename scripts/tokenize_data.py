@@ -236,8 +236,14 @@ def process_block(args):
     idx = np.argsort(event_times)
     event_times = event_times[idx]
     event_labels = event_labels[idx]
-    event_labels = np.array([tokens.index(li) for li in event_labels],
-                            dtype=int)
+    event_labels_int = []
+    for li in event_labels:
+        if li in tokens:
+            event_labels_int.append(tokens.index(li))
+        else:
+            print('Token not found: {}'.format(li))
+            event_labels_int.append(-1)
+    event_labels = np.array(event_labels_int, dtype=int)
 
     rval = make_data.run_extract_windows(block_path, event_times,
                                          align_window, data_type,
